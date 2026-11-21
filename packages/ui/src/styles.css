@@ -1037,7 +1037,8 @@ button.hrow:hover { background: var(--panel-2); color: var(--ink); }
 .bcanvas:hover { box-shadow: 0 0 0 1px var(--ink-3); }
 
 /* look overlays are clipped to the canvas (no halo around it on the board) */
-.fxbox { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 40; }
+/* no z-index here: a layer of its own would wall the looks off from the canvas (lens blur would blur nothing, grain would blend with nothing) */
+.fxbox { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 
 /* board: canvas names (just the name; details on hover), edges to move the live canvas, and the board menu */
 .blabel { height: 15px; padding: 0 5px; font-size: 9.5px; gap: 0; overflow: hidden; text-overflow: ellipsis; display: block; line-height: 15px; border-radius: 3px; }
