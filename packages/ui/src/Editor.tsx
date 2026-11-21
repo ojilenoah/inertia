@@ -8,6 +8,7 @@ import { syncPresets } from "./presets";
 import { syncBrand } from "./brand";
 import { copyKeyframe, copyStyle, nudge, pasteKeyframe, pasteStyle, copyPickedKeys, deletePickedKeys, pastePickedKeys, toggleLock } from "./editing";
 import { Home } from "./Home";
+import { TitleBar, hasTitleBar } from "./TitleBar";
 import { ConfirmBubble } from "./Confirm";
 import { ExportDialog } from "./Export";
 import { openNewerCopy, putProject, restorePictures, startLibrarySync, syncWithDisk } from "./library";
@@ -207,8 +208,10 @@ export function Editor() {
     } catch { /* storage unavailable */ }
   }, []);
   const layout = `${vertical ? "v" : "h"}-${ui.side}`;
+  const framed = hasTitleBar();
   return (
-    <div className="mo" data-theme={ui.theme} style={vars as React.CSSProperties} onContextMenu={(e) => e.preventDefault()}>
+    <div className={"mo" + (framed ? " framed" : "")} data-theme={ui.theme} style={vars as React.CSSProperties} onContextMenu={(e) => e.preventDefault()}>
+      {framed && <TitleBar />}
       {ui.view === "home" ? <Home /> : ui.view === "edit" || ui.view === "board" ? (
         <div className={"ws " + layout + (ui.assets || !vertical ? " am" : "")}>
           <Header />

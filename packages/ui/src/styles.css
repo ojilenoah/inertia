@@ -1204,3 +1204,19 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .cbubble .cbextras { display: flex; flex-direction: column; gap: 2px; margin: 6px 0 4px; }
 .cbubble .cbextras button { text-align: left; justify-content: flex-start; width: 100%; }
 .cbubble .cbextras button:disabled { opacity: .4; }
+
+/* the desktop app's own title bar (Windows' bar is off): drag anywhere empty, double-click to maximise */
+.mo.framed { top: 32px; }
+.tbar { position: fixed; top: 0; left: 0; right: 0; height: 32px; z-index: 500; display: flex; align-items: center; background: var(--bg); color: var(--ink); -webkit-user-select: none; user-select: none; }
+.tbrand { display: flex; align-items: center; gap: 7px; padding-left: 12px; min-width: 0; font: 500 12px var(--sans); }
+.tbrand b { font: 700 12.5px var(--sans); letter-spacing: -.04em; }
+.tbar:not(.onhome) .hmark { --panel: var(--bg); }
+.tbar.onhome { background: var(--panel); }
+.tbname { color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw; }
+.tbname::before { content: "/"; margin: 0 7px 0 2px; opacity: .5; }
+.tbar .sp { flex: 1; align-self: stretch; }
+.tbctl { display: flex; align-self: stretch; }
+.tbctl button { width: 46px; display: grid; place-items: center; color: var(--ink-2); transition: background .12s, color .12s; }
+.tbctl button:hover { background: color-mix(in srgb, var(--ink) 9%, transparent); color: var(--ink); }
+.tbctl button.tbx:hover { background: #e81123; color: #fff; }
+.tbctl svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1; shape-rendering: crispEdges; }

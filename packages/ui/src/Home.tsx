@@ -27,7 +27,7 @@ const ago = (ms: number) => {
 const newId = () => "proj_" + Math.random().toString(36).slice(2, 10);
 
 /** The Inertia mark: a keyframe sliding past the one before it. */
-function Mark({ size = 22 }: { size?: number }) {
+export function Mark({ size = 22 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="28 22 64 76" aria-hidden="true" className="hmark">
       <g strokeLinejoin="round">
