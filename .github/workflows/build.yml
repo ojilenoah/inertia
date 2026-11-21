@@ -52,12 +52,45 @@ jobs:
           name: Build ${{ github.run_number }}
           make_latest: true
           body: |
-            **Download for Windows:** the file ending in `-setup.exe` below — run it to install.
-            (The `.msi` is the same app as a Windows Installer package.)
+            <p align="center">
+              <img src="https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/apps/app/src-tauri/icons/128x128.png" width="96" alt="Moshion" />
+            </p>
 
-            Android: the `.apk` appears here too when the Android build succeeds.
+            <h1 align="center">Moshion</h1>
+            <p align="center"><b>Motion design &amp; video editing — keyframes, paths, masks, 3D and more.</b></p>
 
-            Built from ${{ github.sha }}.
+            <p align="center">
+              <a href="https://github.com/${{ github.repository }}/releases/download/${{ env.TAG }}/Moshion_0.1.0_x64-setup.exe"><img src="https://img.shields.io/badge/Download%20for%20Windows-.exe%20installer-0078D4?style=for-the-badge&logo=windows11&logoColor=white" alt="Download for Windows" /></a>
+              &nbsp;
+              <a href="https://github.com/${{ github.repository }}/releases/download/${{ env.TAG }}/Moshion_0.1.0_x64_en-US.msi"><img src="https://img.shields.io/badge/Windows-.msi%20package-5C2D91?style=for-the-badge&logo=windows11&logoColor=white" alt="Windows MSI" /></a>
+              &nbsp;
+              <a href="#assets"><img src="https://img.shields.io/badge/Android-.apk-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android" /></a>
+            </p>
+
+            <p align="center">
+              <img src="https://img.shields.io/badge/build-${{ github.run_number }}-111111?style=flat-square" alt="Build ${{ github.run_number }}" />
+              <img src="https://img.shields.io/badge/version-0.1.0-E0571A?style=flat-square" alt="Version 0.1.0" />
+              <img src="https://img.shields.io/badge/Windows-10%20%7C%2011%20(64--bit)-0078D4?style=flat-square" alt="Windows 10 and 11" />
+            </p>
+
+            ---
+
+            ### 💻 Install on Windows
+            1. Click **Download for Windows** above.
+            2. Open the downloaded `Moshion_0.1.0_x64-setup.exe`.
+            3. If Windows shows *"Windows protected your PC"*, click **More info → Run anyway** (the app isn't code-signed yet).
+            4. Follow the installer — Moshion opens from the Start menu.
+
+            ### 📱 Android
+            The `.apk` is listed under **Assets** below when the Android build succeeds. Download it on your phone and open it (allow installing from your browser if asked).
+
+            <details>
+            <summary><b>What's in this build</b></summary>
+
+            - Build **#${{ github.run_number }}**, made from commit [`${{ github.sha }}`](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+            - All files are listed under **Assets** below.
+
+            </details>
           files: |
             apps/app/src-tauri/target/release/bundle/nsis/*.exe
             apps/app/src-tauri/target/release/bundle/msi/*.msi
