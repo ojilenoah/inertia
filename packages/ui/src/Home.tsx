@@ -31,9 +31,9 @@ function Mark({ size = 22 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="28 22 64 76" aria-hidden="true" className="hmark">
       <g strokeLinejoin="round">
-        <path d="M45 33 L57 60 L45 87 L33 60 Z" fill="currentColor" stroke="currentColor" strokeWidth="5" />
-        <path d="M72 27 L87 60 L72 93 L57 60 Z" fill="var(--panel)" stroke="var(--panel)" strokeWidth="11" />
-        <path d="M72 27 L87 60 L72 93 L57 60 Z" fill="#E0571A" stroke="#E0571A" strokeWidth="6" />
+        <path d="M47 33 L59 60 L47 87 L35 60 Z" fill="currentColor" stroke="currentColor" strokeWidth="5" />
+        <path d="M70 27 L85 60 L70 93 L55 60 Z" fill="var(--panel)" stroke="var(--panel)" strokeWidth="11" />
+        <path d="M70 27 L85 60 L70 93 L55 60 Z" fill="#E0571A" stroke="#E0571A" strokeWidth="6" />
       </g>
     </svg>
   );
