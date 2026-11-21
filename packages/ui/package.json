@@ -1,0 +1,19 @@
+{
+  "name": "@moshion/ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "peerDependencies": {
+    "react": "^19.1.0"
+  },
+  "dependencies": {
+    "@moshion/engine": "*",
+    "@tauri-apps/plugin-fs": "^2.7.1",
+    "immer": "^11.2.10",
+    "motion": "^14.14.0",
+    "mp4-muxer": "^5.2.2",
+    "zustand": "^5.1.0"
+  }
+}

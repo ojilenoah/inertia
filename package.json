@@ -1,0 +1,17 @@
+{
+  "name": "moshion",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run tauri dev -w @moshion/app",
+    "dev:web": "npm run dev -w @moshion/app",
+    "build": "npm run tauri build -w @moshion/app",
+    "android:init": "npm run tauri android init -w @moshion/app",
+    "android:dev": "npm run tauri android dev -w @moshion/app",
+    "typecheck": "tsc -b packages/engine packages/ui apps/app"
+  }
+}
