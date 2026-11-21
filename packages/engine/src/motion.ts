@@ -190,6 +190,19 @@ export function pathTransform(m: Item, local: Seconds): ((p: Pt) => Pt) | null {
     return [cx + X * k, cy + Y * k];
   };
 }
+/** Like pathTransform, for a point `z` off the path's plane (towards you before tilting). Null when the path is plain. */
+export function pathTransformZ(m: Item, local: Seconds, [x, y]: Pt, z: number): Pt | null {
+  if (!m.pathV2) return null;
+  const rx = sample(m.keys.rx, local, m.base.rx ?? 0), ry = sample(m.keys.ry, local, m.base.ry ?? 0), rz = sample(m.keys.rz, local, m.base.rz ?? 0);
+  const sc = sample(m.keys.scale, local, m.base.scale ?? 1);
+  const [cx, cy] = pathPivot(m), r = Math.PI / 180;
+  let X = (x - cx) * sc, Y = (y - cy) * sc, Z = z * sc;
+  [X, Y] = [X * Math.cos(rz * r) - Y * Math.sin(rz * r), X * Math.sin(rz * r) + Y * Math.cos(rz * r)];
+  [X, Z] = [X * Math.cos(ry * r) + Z * Math.sin(ry * r), -X * Math.sin(ry * r) + Z * Math.cos(ry * r)];
+  [Y, Z] = [Y * Math.cos(rx * r) - Z * Math.sin(rx * r), Y * Math.sin(rx * r) + Z * Math.cos(rx * r)];
+  const k = 1400 / Math.max(1, 1400 - Z);
+  return [cx + X * k, cy + Y * k];
+}
 /** The point a path turns, tilts and grows around: the middle of its nodes. */
 export function pathPivot(m: Item): Pt {
   if (m.pivot) return [m.pivot[0], m.pivot[1]];

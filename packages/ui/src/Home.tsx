@@ -69,7 +69,7 @@ export function Home() {
     <div className="home">
       <div className="hwrap">
         <header className="htop">
-          <b className="hlogo">moshion</b>
+          <b className="hlogo">inertia</b>
           <span className="sp" />
           <span className="hdisk">
             {disk.kind === "app" && <span title="Every project is also saved as a file here">Saved to {disk.where}</span>}

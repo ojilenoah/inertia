@@ -1,5 +1,5 @@
 import type { Item, ItemState, Project, ShapeSpec } from "@moshion/engine";
-import { followOffset, itemState, itemsInGroup, motionShown, numAt, pieceFx, resolveItem, shapeAt, splitPieces, textAnimOf, textUnit } from "@moshion/engine";
+import { followOffset, itemState, itemsInGroup, motionAt, numAt, pathPivot, pathTransform, pathTransformZ, sampleKeys, pieceFx, resolveItem, shapeAt, splitPieces, textAnimOf, textUnit } from "@moshion/engine";
 import { outlinePoints } from "./shapeMorph";
 
 type Pt = [number, number];
@@ -433,13 +433,23 @@ function pathSource(project: Project, item: Item, t: number): PathSrc | null {
   if (p.kind === "motion") {
     // a motion path: the text rides it with the motion's own timing — its middle is where the motion is now
     // (Along shifts it ahead or behind), and it carries on straight past the ends
-    const life = p.end - p.start, N = 200;
-    const pts = Array.from({ length: N + 1 }, (_, i) => { const m = motionShown(p, (i / N) * life); return [m.x, m.y] as Pt; });
+    // the path's own points, put on the canvas through the path's turn / 3D tilt / size: letters tilt with it
+    const life = p.end - p.start, N = 200, lt = Math.min(Math.max(t - p.start, 0), life);
+    const pf = pathTransform(p, lt), sc = sampleKeys(p.keys.scale, lt, p.base.scale ?? 1) || 1;
+    const tiltedPath = Math.abs(sampleKeys(p.keys.rx, lt, p.base.rx ?? 0)) > 0.01 || Math.abs(sampleKeys(p.keys.ry, lt, p.base.ry ?? 0)) > 0.01;
+    const mapP = (q: Pt, z = 0): Pt => {
+      if (!pf) return q;
+      if (!z) return pf(q);
+      // off the path's plane (standing letters): lift it along the plane's own up direction, worked out from the turn
+      const a = pf(q), b = pathTransformZ(p, lt, q, z);
+      return b ?? a;
+    };
+    const pts = Array.from({ length: N + 1 }, (_, i) => { const m = motionAt(p, (i / N) * life); return [m.x, m.y] as Pt; });
     const lens = [0];
     for (let i = 1; i < pts.length; i++) lens.push(lens[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
     const u = Math.min(Math.max((t - p.start) / (life || 1), 0), 1) * N, i0 = Math.min(Math.floor(u), N - 1);
     const anchor = lens[i0] + (lens[i0 + 1] - lens[i0]) * (u - i0);
-    return { pts, closed: false, map: (q) => q, unit: 1, anchor };
+    return { pts, closed: false, map: mapP, unit: pf ? sc : 1, anchor, tilted: tiltedPath, center: pathPivot(p) };
   }
   const ps = itemState(project, p, tc);
   const tilted = !flat3(ps);

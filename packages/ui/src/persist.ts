@@ -68,7 +68,7 @@ export async function saveProject(saveAs = false) {
       if (!handle || saveAs) {
         handle = await w.showSaveFilePicker({
           suggestedName: `${s.project.name.replace(/[^\w\- ]+/g, "").trim() || "project"}${EXT}`,
-          types: [{ description: "Moshion project", accept: { "application/json": [EXT] } }],
+          types: [{ description: "Inertia project", accept: { "application/json": [EXT] } }],
         });
       }
       const out = await handle.createWritable();
@@ -93,7 +93,7 @@ export async function openProject() {
   try {
     let file: File;
     if (w.showOpenFilePicker) {
-      const [h] = await w.showOpenFilePicker({ types: [{ description: "Moshion project", accept: { "application/json": [EXT, ".json"] } }] });
+      const [h] = await w.showOpenFilePicker({ types: [{ description: "Inertia project", accept: { "application/json": [EXT, ".json"] } }] });
       handle = h; file = await h.getFile();
     } else {
       file = await new Promise<File>((res, rej) => {
@@ -105,7 +105,7 @@ export async function openProject() {
     }
     const data = JSON.parse(await file.text());
     const project: Project = data.project ?? data;
-    if (!project?.items || !project?.tracks) throw new Error("not a Moshion project");
+    if (!project?.items || !project?.tracks) throw new Error("not an Inertia project");
     project.effects ??= [];
     useStore.setState({ project, savedProject: project, past: [], pastTimes: [], future: [], selected: null, t: 0 });
     s.toast(`Opened ${file.name}`);

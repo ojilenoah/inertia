@@ -232,7 +232,7 @@ export function Editor() {
       {ui.leaveAsk && (
         <div className="xback" onPointerDown={(e) => { if (e.target === e.currentTarget) useStore.getState().setUI({ leaveAsk: false }); }}>
           <div className="xbox" style={{ width: 320 }}>
-            <div className="xhead"><b>Leave Moshion?</b></div>
+            <div className="xhead"><b>Leave Inertia?</b></div>
             <div className="xrow"><span>Your project is saved. Going back leaves the app.</span></div>
             <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
               {ui.view !== "home" && <button className="hlink" onClick={() => useStore.getState().setUI({ leaveAsk: false, view: "home", panel: null })}>Go to projects</button>}

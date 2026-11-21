@@ -190,7 +190,7 @@ export function ExportDialog() {
   useEffect(() => { if (open) { setPhase({ k: "setup" }); cancel.current = false; } }, [open]);
   if (!open) return null;
 
-  const base = project.name.replace(/[^\w\- ]+/g, " ").replace(/\s+/g, " ").trim() || "moshion";
+  const base = project.name.replace(/[^\w\- ]+/g, " ").replace(/\s+/g, " ").trim() || "inertia";
   const name = `${base}${format === "zip" ? " frames" : ""}.${format}`;
   const range: [number, number] = rangeKind === "loop" && loop ? [loop.a, Math.min(loop.b, project.duration)]
     : rangeKind === "custom" ? [Math.max(0, Math.min(custom[0], project.duration)), Math.max(0, Math.min(custom[1] || project.duration, project.duration))] : [0, project.duration];
