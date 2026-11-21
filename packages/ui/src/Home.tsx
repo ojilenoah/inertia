@@ -26,6 +26,19 @@ const ago = (ms: number) => {
 };
 const newId = () => "proj_" + Math.random().toString(36).slice(2, 10);
 
+/** The Inertia mark: a keyframe sliding past the one before it. */
+function Mark({ size = 22 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="28 22 64 76" aria-hidden="true" className="hmark">
+      <g strokeLinejoin="round">
+        <path d="M45 33 L57 60 L45 87 L33 60 Z" fill="currentColor" stroke="currentColor" strokeWidth="5" />
+        <path d="M72 27 L87 60 L72 93 L57 60 Z" fill="var(--panel)" stroke="var(--panel)" strokeWidth="11" />
+        <path d="M72 27 L87 60 L72 93 L57 60 Z" fill="#E0571A" stroke="#E0571A" strokeWidth="6" />
+      </g>
+    </svg>
+  );
+}
+
 /** A tiny drawing of the project: background plus each item's box at the start. */
 function Thumb({ p, max = 120 }: { p: Project; max?: number }) {
   const k = Math.min(max / p.width, max / p.height);
@@ -65,66 +78,78 @@ export function Home() {
   const recent = list ?? [];
   const openFile = () => openProject().then(() => { const p = useStore.getState().project; putProject(p); useStore.getState().setUI({ view: "edit" }); });
 
+  // the chosen frame, drawn to scale in the preview
+  const fk = Math.min(168 / W, 168 / H);
+  const folder = (disk.kind === "app" || disk.kind === "server") ? disk.where.split(/[\\/]/).filter(Boolean).pop() : "";
+
   return (
     <div className="home">
       <div className="hwrap">
         <header className="htop">
-          <b className="hlogo">inertia</b>
+          <span className="hbrand"><Mark /><b className="hlogo">inertia</b></span>
           <span className="sp" />
           <span className="hdisk">
-            {disk.kind === "app" && <span title="Every project is also saved as a file here">Saved to {disk.where}</span>}
-            {disk.kind === "server" && <span title={`Every project is saved as a file in ${disk.where}, shared by every browser on this computer`}>Saved to {disk.where.split(/[\/]/).slice(-2).join("/")}</span>}
-            {disk.kind === "folder" && <>Saved to folder “{disk.name}” <button className="hlink" onClick={() => chooseFolder()}>Change</button></>}
+            {(disk.kind === "app" || disk.kind === "server") && <span className="hsaved" title={`Every project is also saved as a file in ${disk.where}`}><i />Saving to {folder}</span>}
+            {disk.kind === "folder" && <span className="hsaved"><i />Saving to “{disk.name}” <button className="hlink" onClick={() => chooseFolder()}>Change</button></span>}
             {disk.kind === "needs-permission" && <button className="hwarn" onClick={() => reconnect()}>Allow saving to “{disk.name}”</button>}
             {disk.kind === "none" && <button className="hwarn" onClick={() => chooseFolder()} title="Projects are only in this browser's storage until you pick a folder">Save projects to a folder…</button>}
             {disk.kind === "unsupported" && <span title="This browser can't save to a folder; use Chrome/Edge or the desktop app">Browser storage only</span>}
           </span>
-          <button className="hlink" onClick={openFile}>Open file</button>
+          <button className="hghost" onClick={openFile}>Open file</button>
         </header>
 
-        <section>
-          <h2>New project</h2>
-          <div className="hratios">
-            {RATIOS.map((x) => {
-              const k = 30 / Math.max(x.w, x.h);
-              return (
-                <button key={x.id} className={ratio === x.id ? "on" : ""} onClick={() => setRatio(x.id)} title={`${x.label} · ${x.hint}`}>
-                  <span className="hshape"><i style={{ width: x.id === "custom" ? 24 : x.w * k, height: x.id === "custom" ? 18 : x.h * k, borderStyle: x.id === "custom" ? "dashed" : undefined }} /></span>
-                  <span>{x.id === "custom" ? "Custom" : x.id}</span>
-                </button>
-              );
-            })}
+        <section className="hnew">
+          <div className="hstage">
+            <div className="hframe" style={{ width: W * fk, height: H * fk, background: bg }} />
+            <small>{W} × {H}</small>
           </div>
-          <div className="hform">
-            <input className="hname" value={name} placeholder="Untitled" aria-label="Project name" onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && create()} />
-            {ratio === "custom" && (
-              <span className="hsize">
-                <input type="number" min={16} max={8192} value={cw} aria-label="Width" onChange={(e) => setCw(Math.max(16, +e.target.value || 16))} />×
-                <input type="number" min={16} max={8192} value={ch} aria-label="Height" onChange={(e) => setCh(Math.max(16, +e.target.value || 16))} />
-              </span>
-            )}
-            <span className="hopts">
-              {[24, 30, 60].map((f) => <button key={f} className={fps === f ? "on" : ""} onClick={() => setFps(f)} title={`${f} frames per second`}>{f}</button>)}
-              <em>fps</em>
-            </span>
-            <span className="hsize" title="Length in seconds">
-              <input type="number" min={1} max={3600} value={dur} aria-label="Length in seconds" onChange={(e) => setDur(Math.max(1, +e.target.value || 1))} />s
-            </span>
-            <span className="hbgs">{BGS.map((c) => <button key={c} className={bg === c ? "on" : ""} style={{ background: c }} onClick={() => setBg(c)} title={`Background ${c}`} />)}</span>
-            <span className="sp" />
-            <button className="hcreate" onClick={create}>Create <span>{W}×{H}</span></button>
+          <div className="hsetup">
+            <input className="hname" value={name} placeholder="Untitled project" aria-label="Project name" onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && create()} />
+            <div className="hratios">
+              {RATIOS.map((x) => {
+                const k = 18 / Math.max(x.w, x.h);
+                return (
+                  <button key={x.id} className={ratio === x.id ? "on" : ""} onClick={() => setRatio(x.id)} title={x.hint}>
+                    <span className="hshape"><i style={{ width: x.id === "custom" ? 15 : x.w * k, height: x.id === "custom" ? 11 : x.h * k, borderStyle: x.id === "custom" ? "dashed" : undefined }} /></span>
+                    <span>{x.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="hfields">
+              {ratio === "custom" && (
+                <div className="hfield"><em>Size</em>
+                  <span className="hsize">
+                    <input type="number" min={16} max={8192} value={cw} aria-label="Width" onChange={(e) => setCw(Math.max(16, +e.target.value || 16))} />×
+                    <input type="number" min={16} max={8192} value={ch} aria-label="Height" onChange={(e) => setCh(Math.max(16, +e.target.value || 16))} />
+                  </span>
+                </div>
+              )}
+              <div className="hfield"><em>Frame rate</em>
+                <span className="hopts">{[24, 30, 60].map((f) => <button key={f} className={fps === f ? "on" : ""} onClick={() => setFps(f)} title={`${f} frames per second`}>{f}</button>)}</span>
+              </div>
+              <div className="hfield"><em>Length</em>
+                <span className="hsize" title="Length in seconds"><input type="number" min={1} max={3600} value={dur} aria-label="Length in seconds" onChange={(e) => setDur(Math.max(1, +e.target.value || 1))} />sec</span>
+              </div>
+              <div className="hfield"><em>Background</em>
+                <span className="hbgs">{BGS.map((c) => <button key={c} className={bg === c ? "on" : ""} style={{ background: c }} onClick={() => setBg(c)} title={`Background ${c}`} />)}</span>
+              </div>
+            </div>
+            <button className="hcreate" onClick={create}>Create project</button>
           </div>
         </section>
 
         <section>
-          <h2>Recent</h2>
+          <div className="hsechead"><h2>Recent</h2>{list !== null && <span>{recent.length}</span>}</div>
           {list !== null && (
             <div className="hgrid">
               {recent.map((e) => (
                 <div key={e.id} className={"hcard" + (e.id === current.id ? " last" : "")} onClick={() => openInEditor(e.project)} title={e.id === current.id ? `Continue ${e.name}` : `Open ${e.name}`}>
                   <div className="hcardimg"><Thumb p={e.project} /></div>
-                  <b>{e.name}</b>
-                  <small>{e.width}×{e.height} · {ago(e.updated)}</small>
+                  <div className="hcardtxt">
+                    <b>{e.name}</b>
+                    <small>{e.width}×{e.height} · {ago(e.updated)}</small>
+                  </div>
                   <span className="hacts">
                     <button title="Duplicate" onClick={(ev) => { ev.stopPropagation(); const p = JSON.parse(JSON.stringify(e.project)) as Project; p.id = newId(); p.name += " copy"; putProject(p).then(refresh); }}><Icon name="plus" size={12} /></button>
                     <button title="Delete project" onClick={(ev) => { ev.stopPropagation(); if (confirm(`Delete “${e.name}”? This can't be undone.`)) removeProject(e.id).then(refresh); }}><Icon name="trash" size={12} /></button>
@@ -133,8 +158,10 @@ export function Home() {
               ))}
               <div className="hcard demo" onClick={() => { const p = sampleProject(); p.id = newId(); p.name = "Demo — Launch Reel"; openInEditor(p); }} title="A sample project to explore">
                 <div className="hcardimg"><Thumb p={sampleProject()} /></div>
-                <b>Demo</b>
-                <small>Sample project</small>
+                <div className="hcardtxt">
+                  <b>Demo</b>
+                  <small>Sample project</small>
+                </div>
               </div>
             </div>
           )}

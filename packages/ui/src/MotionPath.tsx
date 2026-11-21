@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { Item, Project, Pt } from "@moshion/engine";
 import { insertRow, placeItem } from "@moshion/engine";
-import { blockLine, motionBlocks, motionNodes, motionShown, movePath, nodePos, pathPivot, pathTransform, pathUntransform, penAddNode, penDeleteNode, penInsertNode, penSplitLine, sampleKeys, segPts, setSegHandles, setStroke, setValue, strokeFor, uid, newMotionItem } from "@moshion/engine";
+import { blockLine, motionBlocks, motionNodes, motionShown, movePath, nodePos, pathPivot, pathTransform, pathUntransform, penAddNode, penDeleteNode, penInsertNode, penSplitLine, sampleKeys, segPts, setSegHandles, setStroke, strokeFor, uid, newMotionItem } from "@moshion/engine";
 import { useStore } from "./store";
 import { askConfirm } from "./Confirm";
+import { pickedProp } from "./EditTools";
 
 /** Add a Motion path at the playhead: one node in the middle of the canvas, picked, ready to drag or grow with +. */
 export function addMotion() {
@@ -185,12 +186,12 @@ export function MotionOverlay({ m, k, t, active }: { m: Item; k: number; t: numb
     pick({ motionId: m.id, whole: true });
     const r = svgRect(e), c = F(pathPivot(m)), cx = r.left + c[0] * k, cy = r.top + c[1] * k;
     const d0 = Math.hypot(e.clientX - cx, e.clientY - cy) || 1, s0 = sampleKeys(m.keys.scale, local, m.base.scale ?? 1);
-    const { checkpoint, edit } = st0();
+    const { checkpoint } = st0(), sp = pickedProp(m.id, undefined, "scale");
     let started = false;
     const mv = (ev: PointerEvent) => {
       if (!started) { started = true; checkpoint(); }
       const s = Math.max(0.05, Math.round(s0 * (Math.hypot(ev.clientX - cx, ev.clientY - cy) / d0) * 1000) / 1000);
-      edit((p) => { const mm = p.items.find((q) => q.id === m.id); if (mm) setValue(mm, "scale", st0().t, s); }, false);
+      sp.set(s); // with keyframes picked: into each of them
     };
     const up = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); };
     addEventListener("pointermove", mv); addEventListener("pointerup", up);
@@ -202,13 +203,13 @@ export function MotionOverlay({ m, k, t, active }: { m: Item; k: number; t: numb
     pick({ motionId: m.id, whole: true });
     const r = svgRect(e), c = F(pathPivot(m)), cx = r.left + c[0] * k, cy = r.top + c[1] * k;
     const a0 = Math.atan2(e.clientY - cy, e.clientX - cx), z0 = sampleKeys(m.keys.rz, local, m.base.rz ?? 0);
-    const { checkpoint, edit } = st0();
+    const { checkpoint } = st0(), zp = pickedProp(m.id, undefined, "rz");
     let started = false;
     const mv = (ev: PointerEvent) => {
       if (!started) { started = true; checkpoint(); }
       let d = ((Math.atan2(ev.clientY - cy, ev.clientX - cx) - a0) * 180) / Math.PI;
       d = ev.shiftKey ? Math.round(d / 15) * 15 : Math.round(d * 10) / 10;
-      edit((p) => { const mm = p.items.find((q) => q.id === m.id); if (mm) setValue(mm, "rz", st0().t, Math.round((z0 + d) * 10) / 10); }, false);
+      zp.set(Math.round((z0 + d) * 10) / 10); // with keyframes picked: into each of them
     };
     const up = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); };
     addEventListener("pointermove", mv); addEventListener("pointerup", up);

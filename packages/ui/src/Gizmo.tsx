@@ -1,6 +1,6 @@
 import type { ItemState, Prop } from "@moshion/engine";
 import { useStore } from "./store";
-import { prop } from "./EditTools";
+import { pickedProp } from "./EditTools";
 
 const C = { x: "#E5484D", y: "#30A46C", z: "#3E63DD" };
 
@@ -19,7 +19,7 @@ function dragger(e: React.PointerEvent, onMove: (dx: number, dy: number, ev: Poi
  * X / Y / Z, coloured rings rotate it around X / Y / Z. Everything is auto-keyed.
  */
 export function Gizmo3D({ itemId, s, k }: { itemId: string; s: ItemState; k: number }) {
-  const P = (p: Prop) => prop(itemId, undefined, p);
+  const P = (p: Prop) => pickedProp(itemId, undefined, p);
   const cx = s.x * k, cy = s.y * k, R = 62;
   const move = (p: Prop, fn: (dx: number, dy: number) => number) => (e: React.PointerEvent) => {
     const a = P(p), v0 = a.get();
@@ -97,7 +97,7 @@ export function RotationGimbal({ itemId, trackId, s, onExit, inline }: { itemId:
     const p = rotate(v, s.rx, s.ry, s.rz), n = rotate([-v[0], -v[1], -v[2]], s.rx, s.ry, s.rz);
     return [{ a, pos: true, v: p }, { a, pos: false, v: n }];
   }).sort((u, w) => u.v[2] - w.v[2]);
-  const P = (p: Prop) => prop(itemId, trackId, p);
+  const P = (p: Prop) => pickedProp(itemId, trackId, p);
   const snap = (a: "x" | "y" | "z", pos: boolean) => {
     const st = useStore.getState();
     st.checkpoint();

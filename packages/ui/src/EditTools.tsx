@@ -30,6 +30,29 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
 const st = () => useStore.getState();
 
 /** get/set an animatable property of an item (auto-keyed) or of a group track (group keys). */
+/**
+ * Like prop, for drags and handles. With keyframes picked on the item, each change goes into every picked
+ * keyframe by the same amount (keeping their differences) instead of making a keyframe at the playhead.
+ * Make one per drag: it remembers the value it last set.
+ */
+export function pickedProp(itemId: string | null, trackId: string | undefined, p: Prop) {
+  const base = prop(itemId, trackId, p);
+  let cur = base.get();
+  return {
+    get: base.get,
+    set: (v: number) => {
+      const s = st(), it = itemId ? s.project.items.find((i) => i.id === itemId) : undefined;
+      const times = it ? s.ui.keySel?.find((q) => q.itemId === it.id)?.times ?? [] : [];
+      if (!it || !times.length) { cur = v; base.set(v); return; }
+      const d = v - cur; cur = v;
+      if (!d) return;
+      const t0 = s.t;
+      for (const lt of times) { useStore.setState({ t: it.start + lt }); base.set(base.get() + d); }
+      useStore.setState({ t: t0 });
+    },
+  };
+}
+
 export function prop(itemId: string | null, trackId: string | undefined, p: Prop) {
   return {
     get: () => {
