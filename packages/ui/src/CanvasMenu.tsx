@@ -9,7 +9,7 @@ import { sectionsFor } from "./EditPanel";
 import { groupOf, itemsInGroup } from "@moshion/engine";
 import { Icon } from "./Icon";
 import { savePreset } from "./presets";
-import { align, copyKeyframe, copyStyle, pasteKeyframe, pasteStyle, toggleLock } from "./editing";
+import { align, copyKeyframe, copyStyle, pasteKeyframe, pasteStyle, toggleLock, groupSelection, ungroupSelection } from "./editing";
 
 export function layer(itemId: string, dir: LayerMove) {
   const s = useStore.getState();
@@ -147,6 +147,8 @@ export function CanvasMenu() {
             s.toast("Keyframes cleared · Ctrl+Z brings them back");
           }, true)}
           {row("Paste keyframe", "Alt+V", () => pasteKeyframe())}
+          {useStore.getState().ui.multi.length > 1 && useStore.getState().ui.multi.includes(it.id) && row(`Group ${useStore.getState().ui.multi.length} items`, "Ctrl+G", () => groupSelection())}
+          {groupOf(project, it) && row(`Ungroup ${groupOf(project, it)!.name}`, "Ctrl+Shift+G", () => ungroupSelection())}
           {row(useStore.getState().ui.multi.length > 1 ? `Delete ${useStore.getState().ui.multi.length} items` : "Delete", "Del", () => { deleteSelection(); }, true)}
         </motion.div>
       )}

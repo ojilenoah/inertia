@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useStacked } from "./layout";
+import type { PinchDetail } from "./touch";
 import type { Item, ItemState, Project, Prop } from "@moshion/engine";
 import { groupPivot, sampleKeys, addKey, composeRotation, groupChain, magicFrame, blurTrail, cameraAt, lookAt, textShown, stackAt as stackAtTime, stackCompare, boardPos, canvases, itemHidden, itemLocked, resolveFx, resolveScene, transLayers, transitionAt } from "@moshion/engine";
 import type { Layer } from "@moshion/engine";
@@ -507,7 +508,37 @@ export function Viewer() {
   }, [stacked, ui.assets]);
   const [cam, setCam] = useState<Cam | null>(null);
   const [wsize, setWsize] = useState({ w: 0, h: 0 });
-  const k = board && cam ? cam.z : kFit;
+  // edit view: zoomed in on the canvas with two fingers (1 = fit); x / y move it from the middle (screen px)
+  const [vz, setVz] = useState({ z: 1, x: 0, y: 0 });
+  const zoomed = !board && (vz.z !== 1 || vz.x !== 0 || vz.y !== 0);
+  const k = board && cam ? cam.z : kFit * (board ? 1 : vz.z);
+  useEffect(() => setVz({ z: 1, x: 0, y: 0 }), [rawProject.id, board]);
+  const pinchRef = useRef<(d: PinchDetail) => void>(() => {});
+  pinchRef.current = (d) => {
+    const r = wrap.current?.getBoundingClientRect();
+    if (!r) return;
+    const mx = d.cx - r.left - r.width / 2, my = d.cy - r.top - r.height / 2;
+    if (board && cam) {
+      // the board: the point under the fingers stays under them while they move and spread
+      const wx = cam.x + (mx - d.dx) / cam.z, wy = cam.y + (my - d.dy) / cam.z;
+      const nz = Math.min(4, Math.max(0.02, cam.z * d.scale));
+      setCam({ x: wx - mx / nz, y: wy - my / nz, z: nz });
+      return;
+    }
+    setVz((v) => {
+      const nz = Math.min(8, Math.max(1, v.z * d.scale));
+      if (nz <= 1.02) return { z: 1, x: 0, y: 0 }; // back to fit
+      const ox = mx - d.dx, oy = my - d.dy; // where the fingers were
+      return { z: nz, x: mx - ((ox - v.x) * nz) / v.z, y: my - ((oy - v.y) * nz) / v.z };
+    });
+  };
+  useEffect(() => {
+    const el = wrap.current;
+    if (!el) return;
+    const on = (ev: Event) => pinchRef.current((ev as CustomEvent<PinchDetail>).detail);
+    el.addEventListener("mo-pinch", on);
+    return () => el.removeEventListener("mo-pinch", on);
+  }, []);
   const cvs = canvases(rawProject);
   const live = cvs.find((c) => t >= c.start && t < c.end) ?? cvs[cvs.length - 1];
   const lpos = boardPos(rawProject, live);
@@ -1011,6 +1042,7 @@ export function Viewer() {
           className="stage" ref={stageRef}
           style={{
             width: project.width * k, height: project.height * k,
+            ...(zoomed ? { translate: `${vz.x}px ${vz.y}px` } : {}),
             ...(board && cam ? { position: "absolute", left: (lpos.x - cam.x) * k + wsize.w / 2, top: (lpos.y - cam.y) * k + wsize.h / 2, overflow: "visible", zIndex: 1 } : {}),
           }}
           onDragOver={(e) => { if (e.dataTransfer.types.includes("moshion/asset")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } }}
@@ -1302,6 +1334,7 @@ export function Viewer() {
         </button>
         {board && cam
           ? <button className="chip" title="Show every canvas" onClick={() => setCam(fitCam(rawProject, wsize.w, wsize.h))}>Board · {Math.round(k * 100)}%</button>
+          : zoomed ? <button className="chip on" title="Back to fit" onClick={() => setVz({ z: 1, x: 0, y: 0 })}>{Math.round(k * 100)}% · Fit</button>
           : <span className="chip">Fit · {Math.round(k * 100)}%</span>}
         <span className="sp" />
         <button className={"ib" + (ui.onion ? " on" : "")} title="Onion skin: see the selected item faintly at its previous (pink) and next (blue) keyframes; masked items and hidden masks show faintly in full, with marching ants round them" onClick={() => setUI({ onion: !ui.onion })}><Icon name="frame" /></button>

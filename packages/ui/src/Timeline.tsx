@@ -6,7 +6,10 @@ import {
 } from "@moshion/engine";
 import type { NumKey } from "@moshion/engine";
 import { numAt as numAtE } from "@moshion/engine";
-import { copyKeyframe, hasKeyClip, pasteKeyframe, toggleLock } from "./editing";
+import { addMarker, copyKeyframe, hasKeyClip, loopIn, loopOut, pasteKeyframe, toggleLock } from "./editing";
+import { AnimatePresence, motion } from "motion/react";
+import { anim } from "./anim";
+import type { PinchDetail } from "./touch";
 import { openPanelAt, pickedCount, pickedOn, useStore } from "./store";
 import { Icon } from "./Icon";
 import { placeAsset } from "./media";
@@ -136,6 +139,25 @@ export function Timeline() {
     if (ui.snap && pps <= 6000) tt = Math.round(tt * project.fps) / project.fps;
     setT(tt);
   }
+  // the ruler's menu (right-click, or hold a finger on it): marker and loop ends at that spot
+  const [rmenu, setRmenu] = useState<{ x: number; y: number } | null>(null);
+  // two fingers on the tracks: pinch to zoom the time, drag to scroll
+  const pinchRef = useRef<(d: PinchDetail) => void>(() => {});
+  pinchRef.current = (d) => {
+    const r = lanesRef.current?.getBoundingClientRect();
+    if (!r) return;
+    if (Math.abs(d.scale - 1) > 0.002) zoomTo(pps * d.scale, d.cx - r.left);
+    else if (d.dx) { userZoomed.current = true; setUI({ viewStart: Math.max(0, viewStart - d.dx / pps) }); }
+    if (d.dy && rowsRef.current) rowsRef.current.scrollTop -= d.dy;
+  };
+  useEffect(() => {
+    const el = lanesRef.current?.closest(".timeline");
+    if (!el) return;
+    const on = (ev: Event) => pinchRef.current((ev as CustomEvent<PinchDetail>).detail);
+    el.addEventListener("mo-pinch", on);
+    return () => el.removeEventListener("mo-pinch", on);
+  }, []);
+
   function startScrub(e: React.PointerEvent) {
     e.stopPropagation();
     scrub(e);
@@ -401,6 +423,17 @@ export function Timeline() {
 
   return (
     <section className="card timeline" aria-label="Timeline" style={{ ["--rowh" as string]: `${ROW_H}px`, ["--clippad" as string]: `${CLIP_PAD}px` }}>
+      <AnimatePresence>{rmenu && (
+        <motion.div key="rmenu" className="rmenu-back" {...anim.fade} onPointerDown={(e) => { if (e.target === e.currentTarget) setRmenu(null); }}>
+          <motion.div className="cmenu rmenu" role="menu" {...anim.pop} style={{ left: Math.min(rmenu.x, innerWidth - 230), top: Math.min(rmenu.y + 6, innerHeight - 200) }}>
+            <button className="cm-row" onClick={() => { addMarker(); setRmenu(null); }}><span>Add a marker here</span><kbd>M</kbd></button>
+            <button className="cm-row" onClick={() => { loopIn(); setRmenu(null); }}><span>Loop starts here</span><kbd>I</kbd></button>
+            <button className="cm-row" onClick={() => { loopOut(); setRmenu(null); }}><span>Loop ends here</span><kbd>O</kbd></button>
+            {ui.loop && <button className="cm-row" onClick={() => { setUI({ loop: { ...ui.loop!, on: !ui.loop!.on } }); setRmenu(null); }}><span>Loop {ui.loop.on ? "off" : "on"}</span><kbd>L</kbd></button>}
+            {ui.loop && <button className="cm-row danger" onClick={() => { setUI({ loop: null }); setRmenu(null); }}><span>Remove the loop</span><kbd /></button>}
+          </motion.div>
+        </motion.div>
+      )}</AnimatePresence>
       <div className="tlbar">
         <div className="seg sm" role="group" aria-label="Timeline tool">
           {tools.map(([id, ic, tip]) => (
@@ -464,7 +497,7 @@ export function Timeline() {
         >
           {/* everything after the video's end is dimmed; drag the end marker to change the length */}
           <div className="tlafter" style={{ left: Math.max(0, x(project.duration)) }} />
-          <div className="ruler" onPointerDown={startScrub}>
+          <div className="ruler" onPointerDown={startScrub} onContextMenu={(e) => { e.preventDefault(); scrub(e); setRmenu({ x: e.clientX, y: e.clientY }); }}>
             {ui.loop && (
               <div className={"loopband" + (ui.loop.on ? " on" : "")} style={{ left: x(ui.loop.a), width: Math.max(2, (ui.loop.b - ui.loop.a) * pps) }}
                 title={`Loop ${ui.loop.a.toFixed(2)}s → ${ui.loop.b.toFixed(2)}s · L turns it ${ui.loop.on ? "off" : "on"} · right-click to remove`}

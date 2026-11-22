@@ -448,7 +448,7 @@ export function PathDrawLayer({ k, stage }: { k: number; stage: React.RefObject<
       <div className="pathhint">
         <b>{placing ? "Click where the path starts" : pen ? `Pen · ${nodes.length} node${nodes.length === 1 ? "" : "s"}` : blocks.length > 1 ? `Block ${draw.block + 1} of ${blocks.length}` : "Draw the path"}</b>
         <span>{placing ? (pen ? "anywhere, also off the canvas · then click for each next node" : "then drag to where it ends")
-          : pen ? "click to add a node · right-click (or Enter) to stop"
+          : pen ? "tap / click to add a node · Done, Enter or right-click (long-press) stops"
           : `${blk[0].toFixed(2)}s → ${blk[1].toFixed(2)}s · drag from the start node to the end`}</span>
         <span className="sp" />
         <div className="seg sm">

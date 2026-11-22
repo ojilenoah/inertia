@@ -1,4 +1,5 @@
 import type { Item, Keyframe, Project, Prop } from "@moshion/engine";
+import { groupItems, groupOf, groupTracks, ungroupTrack } from "@moshion/engine";
 import { LOOK_KEYS, removeLookAndTextKeys, allKeyTimes, colorAt, itemState, keyAt, lookAt, numAt, ownValue, setColor, setLook, setNum, setValue, setShape, setText, shapeAt, textAt } from "@moshion/engine";
 import type { ColorKey, LookKey, NumKey, ShapeSpec } from "@moshion/engine";
 import { useStore } from "./store";
@@ -226,4 +227,43 @@ export function atPickedKeys(itemId: string, run: () => void, commit = true): bo
   for (const lt of times) { useStore.setState({ t: it.start + lt }); run(); }
   useStore.setState({ t: t0 });
   return true;
+}
+
+/** A marker at the playhead (M). */
+export function addMarker() {
+  const s = useStore.getState(), id = "mk" + Math.random().toString(36).slice(2, 8);
+  s.edit((p) => { (p.markers ??= []).push({ id, t: s.t, label: `Marker ${(p.markers?.length ?? 0) + 1}` }); p.markers!.sort((a, b) => a.t - b.t); });
+  s.toast("Marker added · double-click (double-tap) it to rename");
+}
+/** The loop starts at the playhead (I). */
+export function loopIn() {
+  const s = useStore.getState();
+  s.setUI({ loop: { a: s.t, b: Math.max(s.t + 0.1, s.ui.loop?.b ?? s.project.duration), on: true } });
+  s.toast("Loop starts here (O sets the end, L turns it off)");
+}
+/** The loop ends at the playhead (O). */
+export function loopOut() {
+  const s = useStore.getState();
+  s.setUI({ loop: { a: Math.min(s.ui.loop?.a ?? 0, s.t - 0.1), b: s.t, on: true } });
+  s.toast("Loop ends here");
+}
+/** Group the selected items (or tracks) (Ctrl+G). */
+export function groupSelection() {
+  const s = useStore.getState(), sel = s.ui.selTracks;
+  if (s.ui.multi.length > 1) {
+    let g: string | null = null;
+    const ids = s.ui.multi;
+    s.edit((p) => { g = groupItems(p, ids); });
+    if (g) { s.select(null); s.setUI({ selGroup: g }); s.toast(`${ids.length} items grouped`); }
+    return;
+  }
+  let g: string | null = null; s.edit((p) => { g = groupTracks(p, sel); });
+  if (g) { s.setUI({ selTracks: [g] }); s.toast("Tracks grouped"); } else s.toast("Select two or more items (Shift-click or drag a box on the canvas), then Ctrl+G");
+}
+/** Ungroup the selected group, or the group the selected item is in (Ctrl+Shift+G). */
+export function ungroupSelection() {
+  const s = useStore.getState(), sel = s.ui.selTracks;
+  const item = s.project.items.find((i) => i.id === s.selected);
+  const g = s.project.tracks.find((t) => t.id === s.ui.selGroup) ?? (item && groupOf(s.project, item)) ?? s.project.tracks.find((t) => sel.includes(t.id) && t.kind === "group");
+  if (g) { s.edit((p) => ungroupTrack(p, g.id)); s.setUI({ selTracks: [], selGroup: null }); s.toast(`${g.name} ungrouped`); }
 }

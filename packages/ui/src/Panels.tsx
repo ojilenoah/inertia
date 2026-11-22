@@ -9,6 +9,7 @@ import { HistoryButton, RedoButton, UndoButton } from "./History";
 import { ShapePicker } from "./Shapes";
 import { Icon, PlayIcon } from "./Icon";
 import { canScaleUi, useStacked } from "./layout";
+import { toggleMod, useMods, useTouch } from "./touch";
 import { motion } from "motion/react";
 import { anim } from "./anim";
 
@@ -216,11 +217,14 @@ export function Rail() {
   const assetsOn = useStore((s) => s.ui.assets);
   const wide = useStore((s) => !isVertical(s.project));
   const stacked = useStacked();
+  const touch = useTouch();
   const tools: [string, string, string][] = [["text", "type", "Text"], ["glass", "drop", "Liquid glass (effect shape)"]];
   const lineTool = useStore((s) => s.ui.lineTool);
   return (
     <nav className="card rail" aria-label="Tools">
-      {stacked && <><PhoneMenu /><HistoryButton /><hr /></>}
+      {stacked && <><PhoneMenu /><HistoryButton /></>}
+      {touch && <TouchMods />}
+      {(stacked || touch) && <hr />}
       <button className="ib on" title="Select (V)" aria-label="Select"><Icon name="cursor" /></button>
       <hr />
       <ShapePicker />
@@ -242,6 +246,24 @@ export function Rail() {
       }}><Icon name="plus" /></button>
       <button className="ib" title="Import .obj 3D model (coming next)" aria-label="Import 3D model" onClick={() => useStore.getState().toast("3D models (.obj) come with the WebGL renderer")}><Icon name="cube" /></button>
     </nav>
+  );
+}
+
+/**
+ * Touch screens: sticky Shift / Ctrl / Alt. While one is on, every tap and drag acts as if that key were held
+ * (Shift: add to the selection, straight angles · Ctrl: pick the item behind, move a whole path · Alt: stretch keyframes).
+ */
+function TouchMods() {
+  const m = useMods();
+  const b = (k: "shift" | "ctrl" | "alt", label: string, tip: string) => (
+    <button className={"tmod" + (m[k] ? " on" : "")} title={tip} aria-pressed={m[k]} onClick={() => toggleMod(k)}>{label}</button>
+  );
+  return (
+    <div className="tmods" role="group" aria-label="Held keys">
+      {b("shift", "⇧", "Shift held: tap more items to add them to the selection, keep angles and lines straight")}
+      {b("ctrl", "Ctrl", "Ctrl held: tap again to pick the item behind, tap a path to move all of it")}
+      {b("alt", "Alt", "Alt held: dragging a clip's edge stretches its keyframes")}
+    </div>
   );
 }
 

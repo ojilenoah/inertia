@@ -1317,3 +1317,17 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
   :where(.mo) button { transition: none; }
 }
 .pmhint { margin: -4px 0 0; font: 400 11px/1.4 var(--sans); color: var(--ink-3); }
+/* ---------- touch ----------
+   the editor handles every finger itself (so the browser never scrolls or zooms the page and cuts a drag short);
+   lists that scroll keep a one-finger swipe */
+.mo { touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
+.mo .ws, .mo .fd, .mo .num { touch-action: none; }
+.mo .ws :is(.rail, .assets, .agrid, .histpop, .gridpop, .tlbar, .pbar) { touch-action: pan-x pan-y; }
+/* sticky Shift / Ctrl / Alt (touch screens) */
+.tmods { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.tmod { width: 32px; height: 26px; border-radius: 6px; font: 600 10px var(--sans); color: var(--ink-3); }
+.tmod.on { background: var(--accent); color: #111; }
+/* the ruler's menu */
+.rmenu-back { position: fixed; inset: 0; z-index: 95; }
+.rmenu { position: fixed; z-index: 96; }
+.mo.phone .pbar .chip + .chip.on { display: inline-flex; } /* zoomed in: the way back to fit */

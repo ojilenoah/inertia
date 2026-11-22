@@ -1,15 +1,16 @@
 import { useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { anim } from "./anim";
-import { addKey, fmtClock, groupItems, groupOf, groupTracks, splitItem, ungroupTrack } from "@moshion/engine";
+import { addKey, fmtClock, splitItem } from "@moshion/engine";
 import { deleteSelection, isVertical, useStore } from "./store";
 import { Viewer } from "./Viewer";
 import { Assets } from "./Assets";
 import { syncPresets } from "./presets";
 import { syncBrand } from "./brand";
-import { copyKeyframe, copyStyle, nudge, pasteKeyframe, pasteStyle, copyPickedKeys, deletePickedKeys, pastePickedKeys, toggleLock } from "./editing";
+import { copyKeyframe, copyStyle, nudge, pasteKeyframe, pasteStyle, copyPickedKeys, deletePickedKeys, pastePickedKeys, toggleLock, addMarker, loopIn, loopOut, groupSelection, ungroupSelection } from "./editing";
 import { Home } from "./Home";
 import { TitleBar, hasTitleBar } from "./TitleBar";
+import { installTouch } from "./touch";
 import { ConfirmBubble } from "./Confirm";
 import { ExportDialog } from "./Export";
 import { openNewerCopy, putProject, restorePictures, startLibrarySync, syncWithDisk } from "./library";
@@ -99,22 +100,7 @@ function useShortcuts() {
       if (mod && e.shiftKey && e.key.toLowerCase() === "l") { e.preventDefault(); toggleLock(); return; }
       if (mod && e.key.toLowerCase() === "g") {
         e.preventDefault();
-        const sel = s.ui.selTracks;
-        if (e.shiftKey) {
-          const item = s.project.items.find((i) => i.id === s.selected);
-          const g = s.project.tracks.find((t) => t.id === s.ui.selGroup) ?? (item && groupOf(s.project, item)) ?? s.project.tracks.find((t) => sel.includes(t.id) && t.kind === "group");
-          if (g) { s.edit((p) => ungroupTrack(p, g.id)); s.setUI({ selTracks: [], selGroup: null }); s.toast(`${g.name} ungrouped`); }
-          return;
-        }
-        if (s.ui.multi.length > 1) {
-          let g: string | null = null;
-          const ids = s.ui.multi;
-          s.edit((p) => { g = groupItems(p, ids); });
-          if (g) { s.select(null); s.setUI({ selGroup: g }); s.toast(`${ids.length} items grouped`); }
-          return;
-        }
-        let g: string | null = null; s.edit((p) => { g = groupTracks(p, sel); });
-        if (g) { s.setUI({ selTracks: [g] }); s.toast("Tracks grouped"); } else s.toast("Select two or more items (Shift-click or drag a box on the canvas), then Ctrl+G");
+        if (e.shiftKey) ungroupSelection(); else groupSelection();
         return;
       }
       if (s.ui.editingText) return;
@@ -130,9 +116,9 @@ function useShortcuts() {
         case "ArrowDown": if (nudge(0, e.shiftKey ? 10 : 1)) e.preventDefault(); break;
         case ",": s.setT(s.t - 1 / fps); break;
         case ".": s.setT(s.t + 1 / fps); break;
-        case "m": { const id = "mk" + Math.random().toString(36).slice(2, 8); s.edit((p) => { (p.markers ??= []).push({ id, t: s.t, label: `Marker ${(p.markers?.length ?? 0) + 1}` }); p.markers!.sort((a, b) => a.t - b.t); }); s.toast("Marker added · double-click it to rename"); break; }
-        case "i": s.setUI({ loop: { a: s.t, b: Math.max(s.t + 0.1, s.ui.loop?.b ?? s.project.duration), on: true } }); s.toast("Loop starts here (O sets the end, L turns it off)"); break;
-        case "o": s.setUI({ loop: { a: Math.min(s.ui.loop?.a ?? 0, s.t - 0.1), b: s.t, on: true } }); s.toast("Loop ends here"); break;
+        case "m": addMarker(); break;
+        case "i": loopIn(); break;
+        case "o": loopOut(); break;
         case "l": {
           const lp = s.ui.loop;
           if (lp) s.setUI({ loop: { ...lp, on: !lp.on } });
@@ -211,6 +197,8 @@ export function Editor() {
   const layout = stacked ? "s-top" : `${vertical ? "v" : "h"}-${ui.side}`;
   const media = stacked ? ui.assets : ui.assets || !vertical;
   const framed = hasTitleBar();
+  // touch screens: long-press, double-tap, two-finger gestures and the sticky modifier keys
+  useEffect(() => installTouch(), []);
   useEffect(() => applyUiScale(ui.uiScale ?? 1), [ui.uiScale]);
   return (
     <div className={"mo" + (framed ? " framed" : "") + (stacked ? " phone" : "")} data-theme={ui.theme} style={vars as React.CSSProperties} onContextMenu={(e) => e.preventDefault()}>
