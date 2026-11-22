@@ -541,6 +541,41 @@ export function movePath(m: Item, dx: number, dy: number) {
 }
 
 /** Change a pen segment's handles (and re-sample its points). */
+/**
+ * Is a path node smooth (the line flows through it in a curve): both its handles are out and point opposite ways.
+ * End nodes never are.
+ */
+export function nodeIsSmooth(m: Item, n: number): boolean {
+  const nodes = motionNodes(m);
+  if (n <= 0 || n >= nodes.length - 1) return false;
+  const h1 = strokeFor(m, nodes[n - 1].t, nodes[n].t)?.ctrl?.[1], h2 = strokeFor(m, nodes[n].t, nodes[n + 1].t)?.ctrl?.[0];
+  if (!h1 || !h2) return false;
+  const l1 = Math.hypot(h1[0], h1[1]), l2 = Math.hypot(h2[0], h2[1]);
+  return l1 > 0.5 && l2 > 0.5 && (h1[0] * h2[0] + h1[1] * h2[1]) / (l1 * l2) < -0.98;
+}
+/**
+ * Turn a path node smooth (its two handles line up, so the line curves through it) or sharp again (a corner).
+ * The node stays where it is.
+ */
+export function setNodeSmooth(m: Item, n: number, smooth: boolean) {
+  const nodes = motionNodes(m);
+  if (n <= 0 || n >= nodes.length - 1) return;
+  const A = nodes[n - 1], P = nodes[n], B = nodes[n + 1];
+  const ensure = (a: Seconds, b: Seconds) => strokeFor(m, a, b) ?? (setStroke(m, a, b, [nodePos(m, a), nodePos(m, b)]), strokeFor(m, a, b));
+  const s1 = ensure(A.t, P.t), s2 = ensure(P.t, B.t);
+  if (!s1 || !s2) return;
+  const c1: [Pt, Pt] = s1.ctrl ? [[...s1.ctrl[0]] as Pt, [...s1.ctrl[1]] as Pt] : [[0, 0], [0, 0]];
+  const c2: [Pt, Pt] = s2.ctrl ? [[...s2.ctrl[0]] as Pt, [...s2.ctrl[1]] as Pt] : [[0, 0], [0, 0]];
+  if (smooth) {
+    const tx = B.p[0] - A.p[0], ty = B.p[1] - A.p[1], tl = Math.hypot(tx, ty) || 1;
+    const l1 = Math.hypot(P.p[0] - A.p[0], P.p[1] - A.p[1]) / 3, l2 = Math.hypot(B.p[0] - P.p[0], B.p[1] - P.p[1]) / 3;
+    c1[1] = [(-tx / tl) * l1, (-ty / tl) * l1];
+    c2[0] = [(tx / tl) * l2, (ty / tl) * l2];
+  } else { c1[1] = [0, 0]; c2[0] = [0, 0]; }
+  setSegHandles(m, A.t, P.t, c1);
+  setSegHandles(m, P.t, B.t, c2);
+}
+
 export function setSegHandles(m: Item, a: Seconds, b: Seconds, ctrl: [Pt, Pt]) {
   const st = strokeFor(m, a, b);
   if (!st) return;

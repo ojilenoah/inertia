@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Item, Project, Pt } from "@moshion/engine";
-import { insertRow, placeItem } from "@moshion/engine";
+import { insertRow, placeItem, nodeIsSmooth, setNodeSmooth } from "@moshion/engine";
 import { blockLine, motionBlocks, motionNodes, motionShown, movePath, nodePos, pathPivot, pathTransform, pathUntransform, penAddNode, penDeleteNode, penInsertNode, penSplitLine, sampleKeys, segPts, setSegHandles, setStroke, strokeFor, uid, newMotionItem } from "@moshion/engine";
 import { useStore } from "./store";
 import { askConfirm } from "./Confirm";
@@ -159,6 +159,9 @@ export function MotionOverlay({ m, k, t, active }: { m: Item; k: number; t: numb
   const downHandle = (e: React.PointerEvent, i: number, end: 0 | 1, startRaw: Pt) => {
     if (e.button !== 0) return;
     const [a, b] = blocks[i], A = nodePos(m, a), B = nodePos(m, b), base = end ? B : A, S = F(startRaw);
+    // a smooth node: its other handle (on the next / previous piece) turns with this one, so the curve stays smooth
+    const nodeIdx = nodes.findIndex((nd) => Math.abs(nd.t - (end ? b : a)) < 1e-3);
+    const partner = nodeIdx >= 0 && nodeIsSmooth(m, nodeIdx) ? (end ? blocks[i + 1] : blocks[i - 1]) : undefined;
     dragging(e, (dx, dy) => st0().edit((p) => {
       const mm = p.items.find((q) => q.id === m.id); if (!mm) return;
       const st = strokeFor(mm, a, b); if (!st) return;
@@ -166,6 +169,15 @@ export function MotionOverlay({ m, k, t, active }: { m: Item; k: number; t: numb
       const to = INV([S[0] + dx, S[1] + dy]);
       c[end] = [Math.round((to[0] - base[0]) * 10) / 10, Math.round((to[1] - base[1]) * 10) / 10];
       setSegHandles(mm, a, b, c);
+      if (partner) {
+        const ps = strokeFor(mm, partner[0], partner[1]);
+        if (ps?.ctrl) {
+          const pc: [Pt, Pt] = [[...ps.ctrl[0]] as Pt, [...ps.ctrl[1]] as Pt], pe = end ? 0 : 1;
+          const len = Math.hypot(pc[pe][0], pc[pe][1]), hl = Math.hypot(c[end][0], c[end][1]) || 1;
+          pc[pe] = [(-c[end][0] / hl) * len, (-c[end][1] / hl) * len];
+          setSegHandles(mm, partner[0], partner[1], pc);
+        }
+      }
     }, false));
   };
 
@@ -285,10 +297,13 @@ export function MotionOverlay({ m, k, t, active }: { m: Item; k: number; t: numb
               // right-click: delete this node (its lines join up); a path keeps its start node
               e.preventDefault(); e.stopPropagation();
               if (nodes.length <= 1) { st0().toast("A path needs at least one node"); return; }
+              // a node between two others can also be switched between a sharp corner and a smooth curve
+              const mid = n > 0 && n < nodes.length - 1, smooth = mid && nodeIsSmooth(m, n);
               askConfirm(e, n === 0 ? "Delete the start node?" : nd.key ? "Delete this node?" : "Delete the end node?", () => {
                 st0().edit((p) => { const mm = p.items.find((q) => q.id === m.id); if (mm) penDeleteNode(mm, n); });
                 st0().setUI({ pathSel: { motionId: m.id, node: Math.max(0, n - 1) } });
-              });
+              }, "Delete", true, mid ? [{ label: smooth ? "Make sharp" : "Make smooth", hint: smooth ? "A corner again" : "The line curves smoothly through this node",
+                run: () => st0().edit((p) => { const mm = p.items.find((q) => q.id === m.id); if (mm) setNodeSmooth(mm, n, !smooth); }) }] : undefined);
             }}>
             <title>{n === 0 ? "Start node" : nd.key ? `Node at ${nd.t.toFixed(2)}s` : "End node"} · drag to move · click for its turn knob and + · right-click to delete · Ctrl-click to move the whole path</title>
           </circle>

@@ -111,9 +111,38 @@ export function LineEditor({ project, item, t, k }: { project: Project; item: It
     };
     addEventListener("pointermove", mv); addEventListener("pointerup", up);
   };
+  /** a node between two others is smooth when its two handles are out and point opposite ways */
+  const isSmooth = (i: number) => {
+    if (i <= 0 || i >= world.length - 1) return false;
+    const c1 = ctrlW[i - 1], c2 = ctrlW[i], P = world[i];
+    if (!c1 || !c2) return false;
+    const v1 = [c1[1][0] - P[0], c1[1][1] - P[1]], v2 = [c2[0][0] - P[0], c2[0][1] - P[1]];
+    const l1 = Math.hypot(v1[0], v1[1]), l2 = Math.hypot(v2[0], v2[1]);
+    return l1 > 0.5 && l2 > 0.5 && (v1[0] * v2[0] + v1[1] * v2[1]) / (l1 * l2) < -0.98;
+  };
+  /** make a node smooth (the line curves through it) or a sharp corner again; the node stays put */
+  const setSmooth = (i: number, on: boolean) => {
+    const A = world[i - 1], P = world[i], B = world[i + 1];
+    const third = (p: Pt, q: Pt): Pt => [p[0] + (q[0] - p[0]) / 3, p[1] + (q[1] - p[1]) / 3];
+    const c1: [Pt, Pt] = ctrlW[i - 1] ? [[...ctrlW[i - 1]![0]] as Pt, [...ctrlW[i - 1]![1]] as Pt] : [third(A, P), third(P, A)];
+    const c2: [Pt, Pt] = ctrlW[i] ? [[...ctrlW[i]![0]] as Pt, [...ctrlW[i]![1]] as Pt] : [third(P, B), third(B, P)];
+    if (on) {
+      const tx = B[0] - A[0], ty = B[1] - A[1], tl = Math.hypot(tx, ty) || 1;
+      const l1 = Math.hypot(P[0] - A[0], P[1] - A[1]) / 3, l2 = Math.hypot(B[0] - P[0], B[1] - P[1]) / 3;
+      c1[1] = [P[0] - (tx / tl) * l1, P[1] - (ty / tl) * l1];
+      c2[0] = [P[0] + (tx / tl) * l2, P[1] + (ty / tl) * l2];
+    } else { c1[1] = third(P, A); c2[0] = third(P, B); }
+    const straight = (c: [Pt, Pt], a: Pt, b: Pt) => Math.hypot(c[0][0] - third(a, b)[0], c[0][1] - third(a, b)[1]) < 0.5 && Math.hypot(c[1][0] - third(b, a)[0], c[1][1] - third(b, a)[1]) < 0.5;
+    const n1 = straight(c1, A, P) ? null : ([toPt(c1[0]), toPt(c1[1])] as [Pt, Pt]);
+    const n2 = straight(c2, P, B) ? null : ([toPt(c2[0]), toPt(c2[1])] as [Pt, Pt]);
+    checkpoint();
+    change((_pts, ctrl) => { ctrl[i - 1] = n1; ctrl[i] = n2; });
+    fitBox(item.id);
+  };
   const deleteNode = (e: React.MouseEvent, i: number) => {
     e.preventDefault(); e.stopPropagation();
     if (l.pts.length <= 1) { useStore.getState().toast("A line keeps at least one node"); return; }
+    const mid = i > 0 && i < world.length - 1, smooth = mid && isSmooth(i);
     askConfirm(e, "Delete this node?", () => {
       checkpoint();
       change((pts, ctrl) => {
@@ -121,7 +150,7 @@ export function LineEditor({ project, item, t, k }: { project: Project; item: It
         if (i === 0) ctrl.shift(); else if (i >= ctrl.length) ctrl.pop(); else ctrl.splice(i - 1, 2, null);
       });
       setSel(null); fitBox(item.id);
-    });
+    }, "Delete", true, mid ? [{ label: smooth ? "Make sharp" : "Make smooth", hint: smooth ? "A corner again" : "The line curves smoothly through this node", run: () => setSmooth(i, !smooth) }] : undefined);
   };
   /** a node on piece `seg`, at the point of it nearest to canvas point `at` (a bent piece keeps its shape) */
   const insertOn = (seg: number, at: Pt) => {
@@ -162,9 +191,18 @@ export function LineEditor({ project, item, t, k }: { project: Project; item: It
     const a = world[seg], b = world[seg + 1];
     const start: [Pt, Pt] = ctrlW[seg] ?? [[a[0] + (b[0] - a[0]) / 3, a[1] + (b[1] - a[1]) / 3], [a[0] + ((b[0] - a[0]) * 2) / 3, a[1] + ((b[1] - a[1]) * 2) / 3]];
     const base: [Pt, Pt] = [toPt(start[0]), toPt(start[1])];
+    // the node this handle belongs to; when it's smooth, the handle on its other side stays opposite this one
+    const node = end ? seg + 1 : seg, pSeg = end ? seg + 1 : seg - 1, pEnd = end ? 0 : 1;
+    const partner = isSmooth(node) ? ctrlW[pSeg] : null, P = world[node];
+    const pLen = partner ? Math.hypot(partner[pEnd][0] - P[0], partner[pEnd][1] - P[1]) : 0;
     const mv = (ev: PointerEvent) => {
-      const q = toPt(canvasPt(ev, svg));
-      change((_pts, ctrl) => { const c = (ctrl[seg] ?? [base[0], base[1]]) as [Pt, Pt]; c[end] = q; ctrl[seg] = [c[0], c[1]]; });
+      const w = canvasPt(ev, svg), q = toPt(w);
+      const hx = w[0] - P[0], hy = w[1] - P[1], hl = Math.hypot(hx, hy) || 1;
+      const opp = partner ? toPt([P[0] - (hx / hl) * pLen, P[1] - (hy / hl) * pLen]) : null;
+      change((_pts, ctrl) => {
+        const c = (ctrl[seg] ?? [base[0], base[1]]) as [Pt, Pt]; c[end] = q; ctrl[seg] = [c[0], c[1]];
+        if (opp && ctrl[pSeg]) { const pc = ctrl[pSeg] as [Pt, Pt]; pc[pEnd] = opp; ctrl[pSeg] = [pc[0], pc[1]]; }
+      });
     };
     const up = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); fitBox(item.id); };
     addEventListener("pointermove", mv); addEventListener("pointerup", up);
