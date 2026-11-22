@@ -1,4 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+/** Popups drawn at the app's top level: never shut inside a track's own layer (or under the phone's blur). */
+const topLayer = () => (document.querySelector(".mo") as HTMLElement | null) ?? document.body;
 import type { Bezier, EaseName, Item, Keyframe, Project, Prop, Track, TrackSort } from "@moshion/engine";
 import {
   EASE_PRESETS, sampleKeys, remapKeyTimes, smoothValue, backgroundCSS, TRACK_SORTS, sortTracks, addTrack, deleteTrack, insertRow, insertTrackAfter, rowFree, TRANSITIONS, addCanvasKey, splitBackground, moveCanvasKey, removeCanvasKey, contentEnd, itemHidden, itemLocked, keyAt, keySnap, loopLabel, stepLabel, uid, NICE_STEPS, PROP_LABEL, PROPS, SCENE_EFFECTS, addKey, fmtClock, fmtStep, fmtTick, groupTracks, keyTimes,
@@ -105,6 +108,8 @@ export function Timeline() {
   // the playhead "touches" a keyframe when it is within ~7px of it at this zoom
   keySnap.s = Math.min(0.5, Math.max(0.02, 7 / ui.pps));
   const phone = useStacked();
+  // the track names column; collapsed on a phone it hugs the eye / lock buttons
+  const headW = phone && ui.hdrW < 56 ? 40 : ui.hdrW;
   // rows keep their size on screen at whatever interface size is really in effect
   const uiK = useAppliedUiScale();
   setRowSize(phone, uiK);
@@ -159,6 +164,33 @@ export function Timeline() {
     el.addEventListener("mo-pinch", on);
     return () => el.removeEventListener("mo-pinch", on);
   }, []);
+
+  /**
+   * The ruler. Desktop: press and drag to move the playhead. Phones: a quick tap moves the playhead there when the
+   * finger lifts; holding opens the ruler's menu (marker, loop); sliding right makes the ticks finer (zooms in),
+   * sliding left makes them coarser.
+   */
+  function startRuler(e: React.PointerEvent) {
+    if (!(phone || e.pointerType === "touch")) return startScrub(e);
+    e.stopPropagation();
+    const r = lanesRef.current!.getBoundingClientRect();
+    const x0 = e.clientX, t0 = performance.now(), pps0 = pps, anchor = e.clientX - r.left, ta = tOf(anchor);
+    let moved = false;
+    const mv = (ev: PointerEvent) => {
+      const dx = ev.clientX - x0;
+      if (!moved && Math.abs(dx) < 8) return;
+      moved = true;
+      userZoomed.current = true;
+      // about 60px of slide doubles (right) or halves (left) the zoom, around the spot under the finger
+      const p = Math.min(Math.max(pps0 * 2 ** (dx / 60), 2), 2 * 10 ** ZMAX);
+      setUI({ pps: p, viewStart: Math.max(0, ta - (anchor - PAD) / p) });
+    };
+    const up = (ev: PointerEvent) => {
+      removeEventListener("pointermove", mv); removeEventListener("pointerup", up);
+      if (!moved && performance.now() - t0 < 450) scrub(ev); // a quick tap: the playhead goes there now
+    };
+    addEventListener("pointermove", mv); addEventListener("pointerup", up);
+  }
 
   function startScrub(e: React.PointerEvent) {
     e.stopPropagation();
@@ -364,8 +396,40 @@ export function Timeline() {
    */
   function startTlBox(e: React.PointerEvent) {
     if (e.button !== 0 || e.target !== e.currentTarget) return;
+    if (e.pointerType === "touch") return touchOnTracks(e);
+    boxFrom(e.clientX, e.clientY, e.ctrlKey || e.metaKey, e.shiftKey);
+  }
+  /**
+   * A finger on empty track space: dragging scrolls the tracks (sideways through time, up and down through the rows).
+   * Holding still for a moment first draws a selection box instead; a quick tap clears the selection.
+   */
+  function touchOnTracks(e: React.PointerEvent) {
+    const sx = e.clientX, sy = e.clientY, vs0 = viewStart, st0 = rowsRef.current?.scrollTop ?? 0;
     const keys = e.ctrlKey || e.metaKey, add = e.shiftKey;
-    const sx = e.clientX, sy = e.clientY;
+    let mode: "wait" | "pan" | "box" = "wait";
+    const timer = window.setTimeout(() => {
+      if (mode !== "wait") return;
+      mode = "box";
+      navigator.vibrate?.(10);
+      off();
+      boxFrom(sx, sy, keys, add);
+    }, 420);
+    const mv = (ev: PointerEvent) => {
+      if (mode === "wait" && Math.hypot(ev.clientX - sx, ev.clientY - sy) > 8) { mode = "pan"; clearTimeout(timer); }
+      if (mode !== "pan") return;
+      userZoomed.current = true;
+      setUI({ viewStart: Math.max(0, vs0 - (ev.clientX - sx) / pps) });
+      if (rowsRef.current) rowsRef.current.scrollTop = st0 - (ev.clientY - sy);
+    };
+    const up = () => {
+      clearTimeout(timer); off();
+      if (mode === "wait" && !add) { select(null); if (ui.keySel) setUI({ keySel: null }); }
+    };
+    const off = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); };
+    addEventListener("pointermove", mv); addEventListener("pointerup", up);
+  }
+  /** Draw a selection box from this point (Ctrl: pick keyframes instead; Shift: add to the selection). */
+  function boxFrom(sx: number, sy: number, keys: boolean, add: boolean) {
     const base = add ? (ui.multi.length ? ui.multi : selected ? [selected] : []) : [];
     let big = false;
     const rectOf = (ev: { clientX: number; clientY: number }) => ({ l: Math.min(sx, ev.clientX), t: Math.min(sy, ev.clientY), r: Math.max(sx, ev.clientX), b: Math.max(sy, ev.clientY) });
@@ -437,6 +501,8 @@ export function Timeline() {
         </motion.div>
       )}</AnimatePresence>
       <div className="tlbar">
+        {/* phones: the track order button lives in this bar */}
+        {phone && <><SortButton /><div className="sep" /></>}
         <div className="seg sm" role="group" aria-label="Timeline tool">
           {tools.map(([id, ic, tip]) => (
             <button key={id} className={ui.tool === id ? "on" : ""} title={tip} onClick={() => setUI({ tool: id })}><Icon name={ic} /></button>
@@ -467,9 +533,9 @@ export function Timeline() {
         </div>
       </div>
 
-      <div className={"tlbody" + (ui.hdrW < 56 ? " narrow" : "") + (ui.hdrW < 74 ? " noid" : "")} style={{ gridTemplateColumns: `${ui.hdrW}px minmax(0,1fr)` }}>
+      <div className={"tlbody" + (ui.hdrW < 56 ? " narrow" : "") + (ui.hdrW < 74 ? " noid" : "")} style={{ gridTemplateColumns: `${headW}px minmax(0,1fr)` }}>
         <div className="heads">
-          <div className="rulerpad"><SortButton /></div>
+          <div className="rulerpad">{!phone && <SortButton />}</div>
           <div className="hrows" ref={headsRef} onWheel={(e) => { rowsRef.current!.scrollTop += e.deltaY; }}>
             {rows.map((row, i) => row.kind === "graph"
               ? <GraphHead key={"gh" + i} item={row.item} />
@@ -480,7 +546,7 @@ export function Timeline() {
           <CanvasHead project={project} h={canvasH(project)} />
           <div className="rulerpad bot" />
         </div>
-        <div className="hresize" style={{ left: ui.hdrW }} onPointerDown={startHeaderResize} title="Drag to resize track names" />
+        <div className="hresize" style={{ left: headW }} onPointerDown={startHeaderResize} title="Drag to resize track names" />
 
         <div
           className={"lanes" + (ui.tool === "blade" ? " blade" : "")}
@@ -507,7 +573,9 @@ export function Timeline() {
         >
           {/* everything after the video's end is dimmed; drag the end marker to change the length */}
           <div className="tlafter" style={{ left: Math.max(0, x(project.duration)) }} />
-          <div className="ruler" onPointerDown={startScrub} onContextMenu={(e) => { e.preventDefault(); scrub(e); setRmenu({ x: e.clientX, y: e.clientY }); }}>
+          {/* …and the strip before 0:00, shaded the same way */}
+          {x(0) > 0 && <div className="tlafter tlbefore" style={{ width: x(0) }} />}
+          <div className="ruler" onPointerDown={startRuler} onContextMenu={(e) => { e.preventDefault(); scrub(e); setRmenu({ x: e.clientX, y: e.clientY }); }}>
             {/* phones have only this ruler, so the time marks and numbers are here */}
             {phone && ticks.map((k, i) => <i key={i} className={"tick" + (k.maj ? " maj" : "")} style={{ left: k.x }} />)}
             {phone && ticks.filter((k) => k.label).map((k, i) => <span key={"l" + i} className="tlab" style={{ left: k.x }}>{k.label}</span>)}
@@ -541,7 +609,7 @@ export function Timeline() {
             className="lrows"
             ref={rowsRef}
             onScroll={() => { headsRef.current!.scrollTop = rowsRef.current!.scrollTop; }}
-            onPointerDown={startTlBox}
+            onPointerDown={startTlBox} data-nolongpress
             style={fpx > 14 ? { backgroundImage: `repeating-linear-gradient(90deg,transparent 0 ${fpx - 1}px,color-mix(in srgb,var(--ink) 7%,transparent) ${fpx - 1}px ${fpx}px)`, backgroundPosition: `${PAD - ((viewStart * project.fps) % 1) * fpx}px 0` } : undefined}
           >
             {tlBox && <div className={"tlbox" + (tlBox.keys ? " keys" : "")} style={{ left: tlBox.left, top: tlBox.top, width: tlBox.width, height: tlBox.height }} />}
@@ -553,7 +621,7 @@ export function Timeline() {
                   key={row.track.id}
                   className={"lrow" + (row.track.kind === "group" ? " grp" : row.track.parent ? " ch" : i % 2 ? " alt" : "") + (drop?.id === row.track.id ? (drop.ins ? " drop-" + drop.ins : drop.ok ? " drop-ok" : " drop-no") : "")}
                   style={{ height: row.h }} data-track={row.track.id}
-                  onPointerDown={startTlBox}
+                  onPointerDown={startTlBox} data-nolongpress
                 >
                   {row.track.kind === "group"
                     ? <GroupBar project={project} track={row.track} x={x} pps={pps} />
@@ -827,7 +895,7 @@ function Marker({ mk, left }: { mk: { id: string; t: number; label: string; note
   const { edit, setT, checkpoint } = useStore.getState();
   const upd = (fn: (m: { label: string; note?: string; chapter?: boolean }) => void, commit = true) => edit((p) => { const m = p.markers?.find((q) => q.id === mk.id); if (m) fn(m); }, commit);
   return (
-    <div className={"marker" + (mk.chapter ? " chapter" : "") + (mk.note ? " noted" : "")} style={{ left }}
+    <div className={"marker" + (mk.chapter ? " chapter" : "") + (mk.note ? " noted" : "") + (open ? " mo-focus" : "")} style={{ left }}
       title={`${mk.label}${mk.chapter ? " · chapter" : ""}${mk.note ? ` · ${mk.note}` : ""} · ${mk.t.toFixed(2)}s · drag to move · double-click for name, note & chapter · right-click to delete`}
       onPointerDown={(e) => {
         if (e.button !== 0) return;
@@ -845,14 +913,13 @@ function Marker({ mk, left }: { mk: { id: string; t: number; label: string; note
       onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); askConfirm(e, `Delete marker “${mk.label}”?`, () => edit((p) => { p.markers = (p.markers ?? []).filter((q) => q.id !== mk.id); })); }}>
       <i />
       <span>{mk.label}</span>
-      {open && (
+      {open && createPortal(
         <div className="pop mkpop" style={{ position: "fixed", left: Math.min(open.x, innerWidth - 250), top: Math.min(open.y + 10, innerHeight - 220) }} onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
           <input autoFocus defaultValue={mk.label} placeholder="Name" onFocus={() => checkpoint()} onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Escape") setOpen(null); }} onChange={(e) => upd((m) => { m.label = e.target.value || "Marker"; }, false)} />
           <textarea rows={3} defaultValue={mk.note ?? ""} placeholder="Note (only you see it)" onKeyDown={(e) => e.stopPropagation()} onChange={(e) => upd((m) => { m.note = e.target.value || undefined; }, false)} />
           <label className="mkchk"><input type="checkbox" defaultChecked={!!mk.chapter} onChange={(e) => upd((m) => { m.chapter = e.target.checked || undefined; })} /> Chapter (listed when exporting)</label>
           <button className="chip" onClick={() => setOpen(null)}>Done</button>
-        </div>
-      )}
+        </div>, topLayer())}
     </div>
   );
 }
@@ -919,7 +986,9 @@ function TrackHead({ track, alt, selected }: { track: Track; alt: boolean; selec
       >
         <button className={"chev" + (track.open ? " open" : "")} aria-label={track.open ? "Fold group" : "Unfold group"}
           onClick={(e) => { e.stopPropagation(); edit((p) => { const g = p.tracks.find((x) => x.id === track.id)!; g.open = !g.open; }, false); }}><Icon name="chev" /></button>
-        <Icon name="group" className="gi" />
+        {/* the group's icon also folds / unfolds it (the only control left when the names column is narrow) */}
+        <button className="gibtn" aria-label={track.open ? "Fold group" : "Unfold group"} title={`${track.name} · tap to ${track.open ? "fold" : "unfold"}`}
+          onClick={(e) => { e.stopPropagation(); edit((p) => { const g = p.tracks.find((x) => x.id === track.id)!; g.open = !g.open; }, false); }}><Icon name="group" className="gi" /></button>
         <span className="nm">{track.name}</span>
         <span className="badge" title="Group keys apply on top of each item's own keys">∆ GROUP</span>
         <TrackToggles track={track} />
@@ -987,7 +1056,7 @@ function TransPicker({ id, x, y, close }: { id: string; x: number; y: number; cl
   const W = 252, H = 150;
   const top = y - H - 8 < 8 ? y + 26 : y - H - 8;
   const kind = TRANSITIONS.find((q) => q.kind === tr?.kind);
-  return (
+  return createPortal(
     <div ref={ref} className="pop trpick" style={{ position: "fixed", left: Math.min(Math.max(x - W / 2, 8), innerWidth - W - 8), top, width: W }}>
       <div className="trkinds">
         <button className={!tr ? "on" : ""} onClick={() => set((b) => { delete b.trans; })}>Cut</button>
@@ -1009,8 +1078,7 @@ function TransPicker({ id, x, y, close }: { id: string; x: number; y: number; cl
         </div>
       </>}
       {tr?.kind === "board" && <p className="hint" style={{ margin: "4px 0 0" }}>The camera travels between the two canvases as they're laid out on the board.</p>}
-    </div>
-  );
+    </div>, topLayer());
 }
 
 /** The small bar over a clicked canvas part: settings, keyframes, split, delete. */
@@ -1028,7 +1096,7 @@ function CanvasBar({ id, x, t, close }: { id: string; x: number; t: number; clos
   const parts = project.backgrounds ?? [];
   const W = 6 * 31;
   if (y == null) return null;
-  return (
+  return createPortal(
     <div className="fbar cvbar" style={{ position: "fixed", left: Math.min(Math.max(x - W / 2, 8), innerWidth - W - 8), top: y }} onPointerDown={(e) => e.stopPropagation()}>
       <button className="ib" title="Canvas settings: size, length, background, looks, effects"
         onClick={(e) => { const r = (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect(); setUI({ panel: { section: "scene", itemId: null, canvas: !id, bgId: id || undefined, x: r.left + r.width / 2, y: r.top, anchor: { top: r.top, bottom: r.bottom } } }); close(); }}><Icon name="sparkle" /></button>
@@ -1052,8 +1120,7 @@ function CanvasBar({ id, x, t, close }: { id: string; x: number; t: number; clos
         }}><Icon name="scissors" /></button>
       <button className="ib danger" disabled={!id || parts.length < 2} title={id && parts.length > 1 ? "Delete this part of the canvas" : "Split the canvas first to delete a part"}
         onClick={(e) => askConfirm(e, "Delete this part of the canvas?", () => { edit((p) => { p.backgrounds = p.backgrounds?.filter((b) => b.id !== id); }); close(); })}><Icon name="trash" /></button>
-    </div>
-  );
+    </div>, topLayer());
 }
 
 function CanvasHead({ project, h }: { project: Project; h: number }) {
@@ -1208,7 +1275,7 @@ function CanvasRow({ h, x, pps, tOf }: { h: number; x: (t: number) => number; pp
         return (
           <div key={"tr" + b.id}>
             {d > 0 && <i className="trspan" style={{ left: x(b.start - d / 2), width: d * pps }} />}
-            <button className={"trbadge" + (tr ? " on" : "")} style={{ left: x(b.start) }}
+            <button className={"trbadge" + (tr ? " on" : "") + (tpick?.id === b.id ? " mo-focus" : "")} style={{ left: x(b.start) }}
               title={tr ? `${TRANSITIONS.find((q) => q.kind === tr.kind)?.label} · ${tr.dur.toFixed(2)}s · click to change` : "Add a transition between these canvases"}
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setTpick(tpick?.id === b.id ? null : { id: b.id, x: r.left + r.width / 2, y: r.top }); }}>

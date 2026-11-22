@@ -1249,7 +1249,7 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .pmitem { height: 34px; display: flex; align-items: center; gap: 9px; padding: 0 8px; margin: 0 -4px; border-radius: 8px; font: 500 13px var(--sans); color: var(--ink); }
 .pmitem:hover { background: var(--panel-2); }
 /* slimmer bars under the video, so the video gets the height */
-.ws.s-top .tlbar, .ws.s-bottom .tlbar { height: 28px; padding: 0 4px; gap: 2px; overflow-x: auto; overflow-y: hidden; }
+.ws.s-top .tlbar, .ws.s-bottom .tlbar { height: 31px; padding: 0 4px; gap: 2px; overflow-x: auto; overflow-y: hidden; }
 .ws.s-top .tlbar > *, .ws.s-bottom .tlbar > * { flex: none; }
 .ws.s-top .pbar, .ws.s-bottom .pbar { height: 38px; overflow-x: auto; overflow-y: hidden; }
 .ws.s-top .pbar > *, .ws.s-bottom .pbar > * { flex: none; }
@@ -1375,16 +1375,36 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 }
 /* the keyframe graph: no top bar (curve name, Ease menu) */
 .gease { display: none; }
-/* phones: a light blur behind whatever card, menu or popup is open (the ☰ menu has its own) */
-.mo.phone:has(.epanel, .cmenu, .rmenu, .histpop, .gridpop, .shpop, .trpick, .mkpop, .cbubble)::after {
-  content: ""; position: fixed; inset: 0; z-index: 50; pointer-events: none; /* under every popup, card and floating bar (z ≥ 60) */
-  background: rgba(0, 0, 0, .06); -webkit-backdrop-filter: blur(1.5px); backdrop-filter: blur(1.5px);
-}
-/* …but an edit card never blurs the video above it: the item being edited stays sharp */
-.mo.phone:has(.epanel.sheet)::after { top: calc(3px + var(--sh)); }
+/* phones: a light blur behind whatever card, menu or popup is open, with clear windows for what it's about (PhoneDim) */
+.pdim { position: fixed; inset: 0; z-index: 50; pointer-events: none; background: rgba(0, 0, 0, .06); -webkit-backdrop-filter: blur(1.5px); backdrop-filter: blur(1.5px); }
 /* phones: the play controls are a sidebar on the right of the video (the tools sidebar's twin) */
 .mo.phone .ws > .pbar { grid-area: play; flex-direction: column; height: auto; padding: 6px 0; gap: 2px; border-top: 0; border-radius: var(--r); background: var(--panel); overflow-y: auto; overflow-x: hidden; justify-content: center; touch-action: pan-y; }
 .mo.phone .ws > .pbar .transport { flex-direction: column; gap: 2px; }
 .mo.phone .ws > .pbar .tc, .mo.phone .ws > .pbar .tcm { display: none; }
 .mo.phone .ws > .pbar .play { margin: 3px 0; }
 .mo.phone .ws > .pbar .ib { width: 28px; height: 28px; }
+/* phones: no zoom slider or −/+ (slide the ruler to zoom); the tick size and Fit stay */
+.mo.phone .zoomer > :is(.ib, .zf) { display: none; }
+/* phones: the track toolbar centred */
+.mo.phone .tlbar { justify-content: center; }
+.mo.phone .tlbar > .sp { display: none; }
+/* phones: the right sidebar: menu + History on top, play controls in the middle, held keys at the bottom */
+.mo.phone .ws > .pbar { display: grid; grid-template-rows: 1fr auto 1fr; justify-items: center; }
+.mo.phone .ws > .pbar .pbgroup { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.mo.phone .ws > .pbar .pbtop { align-self: start; }
+.mo.phone .ws > .pbar .pbmid { align-self: center; }
+.mo.phone .ws > .pbar .pbbot { align-self: end; }
+.mo.phone .ws > .pbar .pbmid .transport { flex-direction: column; gap: 2px; }
+.mo.phone .ws > .pbar .histpop { position: fixed; top: 8px; right: 46px; left: auto; bottom: auto; }
+.mo.phone .ws > .pbar .tmods { margin-bottom: 2px; }
+.mo.phone .tlbar .tsort { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 6px; flex: none; }
+/* group icon (folds the group) */
+.th.grp .gibtn { display: grid; place-items: center; flex: none; padding: 0; color: inherit; }
+/* names column collapsed: the same space on both sides; groups show just their icon */
+.narrow .th, .narrow .th.grp { padding: 0 4px; justify-content: center; }
+.narrow .th.grp :is(.chev, .badge, .tico) { display: none; }
+.narrow .th.ch { padding-left: 4px; }
+.narrow .th.ch::before { left: 2px; }
+.narrow .th .tico { margin: 0; }
+.mo.phone .narrow .th, .mo.phone .narrow .th.grp { padding: 0 2px; }
+.tlafter.tlbefore { left: 0; right: auto; border-left: 0; border-right: 1.5px solid var(--ink-3); }

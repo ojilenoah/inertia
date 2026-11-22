@@ -11,6 +11,7 @@ import { copyKeyframe, copyStyle, nudge, pasteKeyframe, pasteStyle, copyPickedKe
 import { Home } from "./Home";
 import { TitleBar, hasTitleBar } from "./TitleBar";
 import { installTouch } from "./touch";
+import { PhoneDim } from "./PhoneDim";
 import { ConfirmBubble } from "./Confirm";
 import { ExportDialog } from "./Export";
 import { openNewerCopy, putProject, restorePictures, startLibrarySync, syncWithDisk } from "./library";
@@ -229,6 +230,7 @@ export function Editor() {
           <div className="placeholder">{ui.view === "nodes" ? "Nodes view — transitions between items are built here (next milestone)." : "Board view — every scene on one infinite canvas (next milestone)."}</div>
         </>
       )}
+      {stacked && <PhoneDim />}
       <Tooltips />
       <CanvasMenu />
       <TrackBar />

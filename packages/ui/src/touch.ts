@@ -88,7 +88,9 @@ export function installTouch() {
     }
     if (fingers.size > 2) { ignore.add(e.pointerId); e.stopImmediatePropagation(); return; }
     const target = e.target as Element;
-    press = { id: e.pointerId, x: e.clientX, y: e.clientY, target, moved: false, timer: window.setTimeout(() => {
+    // places that use a long press themselves (empty track space: hold to draw a selection box) get no right-click
+    const own = !!target.hasAttribute?.("data-nolongpress");
+    press = { id: e.pointerId, x: e.clientX, y: e.clientY, target, moved: false, timer: own ? 0 : window.setTimeout(() => {
       // held still: a right-click
       const p = press; press = null;
       if (!p) return;

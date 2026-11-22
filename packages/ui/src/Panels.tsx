@@ -64,13 +64,13 @@ export function PhoneMenu() {
   return (
     <>
       <button className={"ib pmbtn" + (at ? " on" : "")} title={issue ? "Menu · not saved" : "Menu"} aria-label="Menu"
-        onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setAt(at ? null : { x: r.right + 8, y: r.top }); }}>
+        onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setAt(at ? null : r.left > innerWidth / 2 ? { x: -(innerWidth - r.left + 8), y: r.top } : { x: r.right + 8, y: r.top }); }}>
         <Icon name="menu" />{issue && <i className="pmdot" />}
       </button>
       {at && (
         <>
           <div className="pmback" onPointerDown={close} />
-          <motion.div {...anim.pop} className="pmenu" style={{ left: at.x, top: at.y }}>
+          <motion.div {...anim.pop} className="pmenu" style={at.x < 0 ? { right: -at.x, top: at.y } : { left: at.x, top: at.y }}>
             <div className="pmname">
               <input className="pname" value={project.name} aria-label="Project name"
                 onFocus={() => useStore.getState().checkpoint()}
@@ -129,20 +129,31 @@ export function PlayerBar() {
   const ui = useStore((s) => s.ui);
   const vertical = useStore((s) => isVertical(s.project));
   const stacked = useStacked();
+  const touch = useTouch();
   const { setUI } = useStore.getState();
   const sideTip = `Put the video on the ${ui.side === "left" ? "right" : "left"}`;
   const sideTurn = ui.side === "right" ? "scaleX(-1)" : undefined;
-  return (
-    <div className="pbar">
-      <Transport />
+  const loopBtn = (
       <button className={"ib" + (ui.loop?.on ? " on" : "")} title={ui.loop ? `Loop ${ui.loop.a.toFixed(2)}–${ui.loop.b.toFixed(2)}s (L) · I / O set its ends` : "Loop: plays the selected item (or a range set with I and O) over and over (L)"}
         onClick={() => { const s = useStore.getState(); const lp = s.ui.loop; if (lp) s.setUI({ loop: { ...lp, on: !lp.on } }); else { const it = s.project.items.find((i) => i.id === s.selected); s.setUI({ loop: { a: it?.start ?? 0, b: it?.end ?? s.project.duration, on: true } }); } }}>
         <Icon name="cycle" />
       </button>
+  );
+  // phones: a sidebar beside the video: menu and History on top, the play controls in the exact middle, held keys at the bottom
+  if (stacked) return (
+    <div className="pbar">
+      <div className="pbgroup pbtop"><PhoneMenu /><HistoryButton /></div>
+      <div className="pbgroup pbmid"><Transport />{loopBtn}<UndoButton /><RedoButton /></div>
+      <div className="pbgroup pbbot">{touch && <TouchMods />}</div>
+    </div>
+  );
+  return (
+    <div className="pbar">
+      <Transport />
+      {loopBtn}
       <span className="pbsep" />
       <UndoButton />
       <RedoButton />
-      {stacked ? null : <>
       <HistoryButton />
       <span className="sp" />
       <button className="ib" title={sideTip} aria-label={sideTip} onClick={() => setUI({ side: ui.side === "left" ? "right" : "left" })}>
@@ -150,7 +161,6 @@ export function PlayerBar() {
       </button>
       <span className="pbar-ratio" title="Layout follows the video shape">{vertical ? "Tall" : "Wide"}</span>
       <button className="ib" title="Toggle theme" onClick={() => setUI({ theme: ui.theme === "dark" ? "light" : "dark" })}><Icon name={ui.theme === "dark" ? "moon" : "sun"} /></button>
-      </>}
     </div>
   );
 }
@@ -230,9 +240,8 @@ export function Rail() {
   const lineTool = useStore((s) => s.ui.lineTool);
   return (
     <nav className="card rail" aria-label="Tools">
-      {stacked && <><PhoneMenu /><HistoryButton /></>}
-      {touch && <TouchMods />}
-      {(stacked || touch) && <hr />}
+      {/* phones: the menu, History and the held keys are on the right sidebar */}
+      {touch && !stacked && <><TouchMods /><hr /></>}
       <button className="ib on" title="Select (V)" aria-label="Select"><Icon name="cursor" /></button>
       <hr />
       <ShapePicker />
