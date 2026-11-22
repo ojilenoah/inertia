@@ -22,3 +22,12 @@ Ideas and features we've agreed to do later. Newest at the top.
 - Export extras: GIF / WebM / PNG sequence, transparent video, export a time range
 - GitHub repo + cloud builds for the Windows .exe and Android .apk (workflow is in `.github/workflows/build.yml`)
 - Lens blur (2026-11-21): since the looks layer fix it shows again, but its edges look whitish/washed out compared with before (the blur pulls in what's outside the canvas). Revisit: clamp the blur to the canvas so the edges stay true.
+
+## Video plan (agreed 2026-11-22, not started)
+Build in this order; each step is usable on its own.
+1. **Video engine (foundation)** — decode frames ourselves with WebCodecs (+ an MP4 demuxer) instead of seeking `<video>`: exact frames, fast, same in editor and export. Frame cache for smooth scrubbing/playback. Filmstrip thumbnails on video clips. Later on desktop: bundled ffmpeg for MOV/ProRes/HEVC and low-res proxies.
+2. **Editing essentials** — speed ramps (keyframed speed, freeze frame, smooth slow-mo); transitions between clips on the same track (crossfade, dip, wipes, zoom, slide); detach audio from video; volume keyframes; slip/slide edits; scene-cut detection (auto split).
+3. **GPU effects pipeline** (shared by editor and export) — colour (exposure, contrast, saturation, temperature, tint, curves, .cube LUTs); chroma key / luma key; blur, sharpen, vignette, film looks, glitch — all keyframable.
+4. **Motion tracking** — point tracking forward/back (result = keyframes you can fix); anything can follow a track (text, stickers, blur boxes, masks); 4-corner tracking drives the corner pin; stabilisation; auto-reframe wide → vertical.
+5. **Smart extras** — background removal without green screen; auto captions from speech (can drive text animations); face tracking (auto blur faces, attach things to a face).
+Suggested order after step 1: tracking (4), then 2 and 3.

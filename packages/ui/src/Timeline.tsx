@@ -8,7 +8,8 @@ import {
   ownValue, removeKey, removeLookAndTextKeys, ripple, shiftLookAndTextKeys, snap, snapTargets, splitItem, toBezier, ungroupTrack,
 } from "@moshion/engine";
 import type { NumKey } from "@moshion/engine";
-import { itemsInGroup, orderTracks } from "@moshion/engine";
+import { itemsInGroup, orderTracks, addCanvas, canvases, insertCanvasAfter } from "@moshion/engine";
+import type { Background } from "@moshion/engine";
 import { numAt as numAtE } from "@moshion/engine";
 import { addMarker, copyKeyframe, hasKeyClip, loopIn, loopOut, pasteKeyframe, toggleLock } from "./editing";
 import { AnimatePresence, motion } from "motion/react";
@@ -1362,6 +1363,23 @@ function CanvasRow({ h, x, pps, tOf }: { h: number; x: (t: number) => number; pp
           </div>
         );
       })}
+      {/* + right after the last canvas: a new canvas there (the video gets longer) */}
+      {(() => {
+        const end = bgs.length ? Math.max(...bgs.map((q) => q.end)) : project.duration;
+        return (
+          <button className="cvadd" title="Add a canvas" aria-label="Add a canvas" style={{ left: x(end) + 6, top: CLIP_PAD, width: ROW_H - 2 * CLIP_PAD, height: ROW_H - 2 * CLIP_PAD }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              let c: Background | null = null;
+              edit((p) => {
+                const last = canvases(p).at(-1);
+                c = last?.id ? insertCanvasAfter(p, last.id, uid("bg"), 3) : addCanvas(p, uid("bg"));
+              });
+              if (c) { useStore.getState().setT(Math.min((c as Background).start + 1e-3, (c as Background).end)); toast(`${(c as Background).name} added`); }
+            }}><Icon name="plus" size={14} /></button>
+        );
+      })()}
       {(project.canvasKeys ?? []).map((k) => (
         <i key={k} className="kd cvkd" style={{ left: x(k) }} title={`Canvas keyframe at ${fmtClock(k)}`}
           onPointerDown={(e) => {
