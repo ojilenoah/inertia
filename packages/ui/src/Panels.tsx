@@ -10,6 +10,7 @@ import { ShapePicker } from "./Shapes";
 import { Icon, PlayIcon } from "./Icon";
 import { canScaleUi, useStacked } from "./layout";
 import { toggleMod, useMods, useTouch } from "./touch";
+import { GridButton } from "./Grid";
 import { motion } from "motion/react";
 import { anim } from "./anim";
 
@@ -79,6 +80,13 @@ export function PhoneMenu() {
             </div>
             <SaveWarning />
             <button className="pmitem pmexport" onClick={() => { close(); setUI({ exporting: true }); }}><Icon name="export" />Export</button>
+            <div className="pmrow"><em>Canvas</em>
+              <span className="pmtools">
+                <button className={"ib" + (ui.onion ? " on" : "")} title="Onion skin: the selected item faintly at its previous and next keyframes" aria-label="Onion skin" onClick={() => setUI({ onion: !ui.onion })}><Icon name="frame" /></button>
+                <GridButton />
+                <button className={"ib" + (ui.orbit ? " on" : "")} title="3D orbit view" aria-label="3D orbit view" onClick={() => setUI({ orbit: !ui.orbit })}><Icon name="cube" /></button>
+              </span>
+            </div>
             <div className="pmrow"><em>View</em>
               <div className="seg" role="group" aria-label="View">
                 {([["edit", "edit", "Edit"], ["nodes", "nodes", "Nodes"], ["board", "board", "Board"]] as const).map(([v, ic, label]) => (
@@ -134,7 +142,7 @@ export function PlayerBar() {
       <span className="pbsep" />
       <UndoButton />
       <RedoButton />
-      {stacked ? <span className="pbslot" id="pbslot" /> : <>
+      {stacked ? null : <>
       <HistoryButton />
       <span className="sp" />
       <button className="ib" title={sideTip} aria-label={sideTip} onClick={() => setUI({ side: ui.side === "left" ? "right" : "left" })}>

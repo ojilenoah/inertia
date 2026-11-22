@@ -33,6 +33,7 @@ import { findBeats } from "./waveform";
 import { CONTAINER_KINDS, moveInside, placeImageInside, placeNewInside, placeVideoInside, takeOut } from "./inside";
 import { Icon } from "./Icon";
 import { Fader } from "./Fader";
+import { useStacked } from "./layout";
 
 const st = () => useStore.getState();
 export const FONTS = [
@@ -800,6 +801,7 @@ export function EditPanel() {
   const group = panel?.trackId ? project.tracks.find((x) => x.id === panel.trackId) : undefined;
   const W = panel?.section === "text" ? 380 : 340;
   const [h, setH] = useState(300);
+  const stacked = useStacked();
   const frozen = useRef<{ key: string; x: number; top: number; bottom: number; upper: boolean } | null>(null);
   useLayoutEffect(() => { const el = ref.current; if (el && Math.abs(el.scrollHeight - h) > 2) setH(el.scrollHeight); });
   const fit = (v: number, size: number, max: number) => Math.min(Math.max(8, v), Math.max(8, max - size - 8));
@@ -835,6 +837,13 @@ export function EditPanel() {
     y = fit(f.upper ? f.top : f.bottom - shown, shown, innerHeight);
   } else {
     maxH = innerHeight - 16; x = fit(panel ? panel.x - W / 2 : 0, W, innerWidth); y = fit(panel ? panel.y : 0, Math.min(h, maxH), innerHeight);
+  }
+  // phones: the card is a sheet over the tracks, right under the video, so the item being edited stays in sight
+  const sheet = stacked && !drag;
+  let cardW = W;
+  if (sheet) {
+    const vb = document.querySelector(".ws .viewer")?.getBoundingClientRect().bottom ?? innerHeight * 0.55;
+    x = 4; cardW = innerWidth - 8; y = Math.round(vb + 4); maxH = Math.max(160, innerHeight - y - 4); above = false;
   }
   const show = !!panel && (panel.section === "scene" || !!item || !!group);
 
@@ -1409,7 +1418,7 @@ export function EditPanel() {
     <AnimatePresence>
       {show && (
         <motion.div
-          ref={ref} className="pop epanel" role="dialog" aria-label={titles[panel!.section]} style={{ left: x, top: y, width: W, maxHeight: maxH, overflowY: "auto" }}
+          ref={ref} className={"pop epanel" + (sheet ? " sheet" : "")} role="dialog" aria-label={titles[panel!.section]} style={{ left: x, top: y, width: cardW, maxHeight: maxH, overflowY: "auto" }}
           initial={{ opacity: 0, y: above ? 6 : -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, transition: { duration: 0.1 } }}
           transition={{ type: "spring", stiffness: 500, damping: 36 }}
         >

@@ -24,11 +24,12 @@ import { CanvasMenu, duplicate, layer } from "./CanvasMenu";
 import { openProject, saveProject, startAutosave } from "./persist";
 import "./styles.css";
 
-function useLayoutVars(vertical: boolean, aspect: number, media: boolean, f = 1) {
+function useLayoutVars(vertical: boolean, aspect: number, media: boolean, f = 1, split: number | null = null) {
   const size = useWindowSize();
   // upright phone: the video takes the full width, up to a bit under half the height
   // (no top bar there, and the tools sit beside the video)
-  const sh = Math.round(Math.max(160, Math.min((size.h - 6) * 0.6, (size.w - 6 - 45) / aspect)));
+  const auto = Math.min((size.h - 6) * 0.6, (size.w - 6 - 45) / aspect);
+  const sh = Math.round(Math.max(120, Math.min(size.h - 160, split != null ? (size.h - 6) * split : auto)));
   const vw = Math.round(Math.min(size.w * 0.75, Math.max(200, Math.min(size.w * 0.4, ((size.h - 6 - 34) * 9) / 16) * f)));
   const rows = size.h - 6;
   // horizontal: the video row takes ~58% of the height, the timeline the rest
@@ -162,7 +163,7 @@ export function Editor() {
   const project = useStore((s) => s.project);
   const ui = useStore((s) => s.ui);
   const vertical = isVertical(project);
-  const { vertical: _v, stacked, ...vars } = useLayoutVars(vertical, project.width / project.height, true, ui.view === "board" ? ui.viewK ?? 1 : 1);
+  const { vertical: _v, stacked, ...vars } = useLayoutVars(vertical, project.width / project.height, true, ui.view === "board" ? ui.viewK ?? 1 : 1, ui.phoneVid ?? null);
   usePlayback();
   useShortcuts();
   useEffect(() => startAutosave(), []);
@@ -201,7 +202,7 @@ export function Editor() {
   useEffect(() => installTouch(), []);
   useEffect(() => applyUiScale(ui.uiScale ?? 1), [ui.uiScale]);
   return (
-    <div className={"mo" + (framed ? " framed" : "") + (stacked ? " phone" : "")} data-theme={ui.theme} style={vars as React.CSSProperties} onContextMenu={(e) => e.preventDefault()}>
+    <div className={"mo" + (framed ? " framed" : "") + (stacked ? " phone" : "") + (stacked && (ui.panel || ui.ctx) ? " dimmed" : "")} data-theme={ui.theme} style={vars as React.CSSProperties} onContextMenu={(e) => e.preventDefault()}>
       {framed && <TitleBar />}
       {ui.view === "home" ? <Home /> : ui.view === "edit" || ui.view === "board" ? (
         <div className={"ws " + layout + (media ? " am" : "")}>

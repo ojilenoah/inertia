@@ -116,7 +116,7 @@ button.chip:hover { color: var(--ink); }
 .zoomer { display: flex; align-items: center; gap: 2px; flex: 0 1 auto; min-width: 0; }
 .zoomer input { width: 110px; accent-color: var(--ink); }
 .zoomer input.fader { width: auto; flex: 0 1 200px; min-width: 80px; }
-.zunit { font: 500 10px var(--mono); color: var(--ink-2); white-space: nowrap; margin-right: 4px; min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; }
+.zunit { font: 500 10px var(--mono); color: var(--ink-3); white-space: nowrap; min-width: 30px; margin: 0 2px; text-align: center; flex: none; }
 .tlbody { flex: 1; min-height: 0; display: grid; position: relative; }
 .heads { border-right: 1px solid var(--line); overflow: hidden; display: flex; flex-direction: column; }
 .rulerpad { height: 30px; border-bottom: 1px solid var(--line); display: flex; align-items: center; padding: 0 10px; flex: none; overflow: hidden; }
@@ -689,7 +689,7 @@ button.chip:hover { color: var(--ink); }
 .gnote { font: 400 10.5px var(--sans); color: var(--ink-3); line-height: 1.4; }
 
 /* ---------- export window ---------- */
-.xback { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,.45); display: grid; place-items: center; }
+.xback { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,.3); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); display: grid; place-items: center; }
 .xbox { width: 380px; max-width: calc(100vw - 32px); background: var(--panel); color: var(--ink); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 30px 80px -20px rgba(0,0,0,.6); }
 .xhead { display: flex; align-items: center; } .xhead b { font: 600 14px var(--sans); }
 .xclose { width: 24px; height: 24px; border-radius: 5px; color: var(--ink-3); font-size: 18px; line-height: 1; } .xclose:hover { background: var(--panel-2); color: var(--ink); }
@@ -1238,7 +1238,7 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 /* the menu button at the top of the sidebar, and its menu */
 .pmbtn { position: relative; }
 .pmdot { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: #e5484d; box-shadow: 0 0 0 2px var(--panel); }
-.pmback { position: fixed; inset: 0; z-index: 110; pointer-events: auto; }
+.pmback { position: fixed; inset: 0; z-index: 110; pointer-events: auto; background: rgba(0,0,0,.06); -webkit-backdrop-filter: blur(1.5px); backdrop-filter: blur(1.5px); }
 .pmenu { position: fixed; z-index: 120; width: min(270px, calc(100vw - 24px)); display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 12px; background: var(--panel); box-shadow: 0 0 0 1px var(--line), 0 18px 44px -14px rgba(0,0,0,.55); }
 .pmname { display: flex; flex-direction: column; gap: 2px; }
 .pmname .pname { width: 100%; font-size: 15px !important; }
@@ -1331,3 +1331,29 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .rmenu-back { position: fixed; inset: 0; z-index: 95; }
 .rmenu { position: fixed; z-index: 96; }
 .mo.phone .pbar .chip + .chip.on { display: inline-flex; } /* zoomed in: the way back to fit */
+/* phones: centred play bar; canvas aids live in the menu; a floating "back to fit" chip when zoomed */
+.mo.phone .pbar { justify-content: center; }
+.pmtools { display: flex; align-items: center; gap: 2px; }
+.pmtools .ib { width: 30px; height: 30px; }
+.vfit { position: absolute; top: 8px; right: 8px; z-index: 20; }
+.mo.phone .viewer { position: relative; }
+/* phones: the bar on top of the tracks that resizes the video and the tracks */
+/* a small grab handle on the tracks' top edge (not a row of its own) */
+.mo.phone .timeline { position: relative; }
+.tsplit { position: absolute; top: 0; left: 50%; width: 64px; height: 12px; margin-left: -32px; z-index: 12; display: grid; place-items: start center; padding-top: 2px; cursor: ns-resize; touch-action: none; }
+.tsplit i { width: 34px; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--ink) 35%, transparent); transition: background .14s, width .14s; }
+.tsplit:hover i, .tsplit:active i { background: var(--ink-3); width: 48px; }
+/* phones: an open card or menu softly blurs the tracks and tools behind it (never the video: the item stays in sight) */
+.mo.phone .ws > :is(.timeline, .rail, .assets) { transition: filter .2s ease, opacity .2s ease; }
+.mo.phone.dimmed .ws > :is(.timeline, .rail, .assets) { filter: blur(1.5px); opacity: .8; }
+/* phones: the edit card as a sheet under the video */
+.epanel.sheet { border-radius: 14px; box-shadow: 0 -10px 30px -12px rgba(0,0,0,.45), 0 0 0 1px var(--line); }
+/* the transition marker between two canvases: a small box sitting right in the gap, centred on the seam both ways */
+.lrow.canvas .trbadge, .lrow.canvas .trbadge.on { top: 50%; left: auto; margin: 0; width: 14px; height: calc(var(--rowh, 32px) - 2 * var(--clippad, 4px) - 2px); max-height: 22px; transform: translate(-50%, -50%); border-radius: 4px; }
+.lrow.canvas .trbadge svg.i { width: 9px; height: 9px; }
+/* the menu button stays on top of the menu's backdrop, so tapping it again closes the menu */
+.pmbtn.on { z-index: 115; }
+/* the playhead's line: grab it anywhere along its length (wider for fingers) */
+.phgrab { position: absolute; top: 22px; bottom: 0; left: -5px; width: 10px; pointer-events: auto; cursor: ew-resize; touch-action: none; }
+.mo.phone .phgrab { top: 16px; }
+@media (any-pointer: coarse) { .phgrab { left: -11px; width: 22px; } }

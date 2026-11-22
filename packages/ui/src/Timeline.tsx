@@ -122,8 +122,10 @@ export function Timeline() {
     const maj = Math.abs(tt / major - Math.round(tt / major)) < 1e-6;
     ticks.push({ x: px, maj, label: maj ? fmtTick(Math.max(0, tt), major) : undefined });
   }
-  const span = W / pps;
-  const unit = span > 120 ? "min" : span > 4 ? "s" : span > 0.25 ? "frames" : span > 0.01 ? "ms" : "sub-ms";
+  // beside the zoom slider: how far apart the ruler's small ticks are (whole frames when zoomed in that far)
+  const tickFrames = minor * project.fps;
+  const tickLabel = W / pps <= 4 && tickFrames >= 1 && Math.abs(tickFrames - Math.round(tickFrames)) < 1e-6 ? `${Math.round(tickFrames)}f`
+    : minor >= 0.1 ? `${+minor.toPrecision(3)}s` : fmtStep(minor);
   const fpx = pps / project.fps;
 
   function zoomTo(p: number, anchorX = x(t)) {
@@ -423,6 +425,16 @@ export function Timeline() {
 
   return (
     <section className="card timeline" aria-label="Timeline" style={{ ["--rowh" as string]: `${ROW_H}px`, ["--clippad" as string]: `${CLIP_PAD}px` }}>
+      {/* phones: drag this bar to give the video or the tracks more height (double-tap: automatic) */}
+      {phone && <div className="tsplit" title="Drag to resize the video and the tracks · double-tap for the automatic size"
+        onDoubleClick={() => setUI({ phoneVid: null })}
+        onPointerDown={(e) => {
+          e.preventDefault(); e.stopPropagation();
+          const ws = (e.currentTarget.closest(".ws") as HTMLElement).getBoundingClientRect();
+          const mv = (ev: PointerEvent) => setUI({ phoneVid: Math.round(Math.min(0.85, Math.max(0.15, (ev.clientY - ws.top) / ws.height)) * 1000) / 1000 });
+          const up = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); };
+          addEventListener("pointermove", mv); addEventListener("pointerup", up);
+        }}><i /></div>}
       <AnimatePresence>{rmenu && (
         <motion.div key="rmenu" className="rmenu-back" {...anim.fade} onPointerDown={(e) => { if (e.target === e.currentTarget) setRmenu(null); }}>
           <motion.div className="cmenu rmenu" role="menu" {...anim.pop} style={{ left: Math.min(rmenu.x, innerWidth - 230), top: Math.min(rmenu.y + 6, innerHeight - 200) }}>
@@ -449,9 +461,9 @@ export function Timeline() {
         {!phone && <><div className="sep" />{groupBtn()}</>}
         <span className="sp" />
         <div className="zoomer">
-          <span className="zunit" title="How much time the view spans, and the gap between ruler ticks">{unit} · tick {fmtStep(minor)}</span>
           <button className="ib" title="Zoom out (−)" onClick={() => zoomTo(pps / 2.5)}><Icon name="zout" /></button>
           <ZoomFader value={pps2v(pps)} onChange={(v) => zoomTo(v2pps(v))} />
+          <span className="zunit" title="Time between the ruler's small ticks">{tickLabel}</span>
           <button className="ib" title="Zoom in (+)" onClick={() => zoomTo(pps * 2.5)}><Icon name="zin" /></button>
           <button className="chip" title="Fit the whole scene in view" onClick={() => setUI({ pps: (W - 36) / (project.duration * 1.25 + 0.5), viewStart: 0 })}>Fit</button>
         </div>
@@ -674,6 +686,8 @@ export function Timeline() {
             <div className="playhead" style={{ left: phx }}>
               <div className="phtag" onPointerDown={startScrub}>{fmtClock(t, dec)}</div>
               <div className="phtag bot" onPointerDown={startScrub}>{fmtClock(t, dec)}</div>
+              {/* the line itself can be grabbed and dragged too */}
+              <i className="phgrab" onPointerDown={startScrub} title="Drag to move the playhead" />
             </div>
           )}
           <span style={{ display: "none" }}>{totalH}</span>

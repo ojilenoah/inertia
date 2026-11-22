@@ -35,6 +35,10 @@ export interface UIState {
   hdrW: number;
   /** Phones: how big the buttons and panels are drawn (1 = normal; smaller leaves more room for the video). */
   uiScale: number;
+  /** Phones: share of the height the video takes (dragged with the bar on top of the tracks); null = automatic. */
+  phoneVid: number | null;
+  /** The canvas seen at an angle (3D orbit view). */
+  orbit: boolean;
   /** How big the video area is (1 = automatic size); drag its edge to change it. */
   viewK: number;
   /** How the timeline lists tracks (only the view: "layer" is the real front-to-back order). */
@@ -143,7 +147,7 @@ function makeStore() {
     ui: {
       view: inProjectAtLoad() ? "edit" : "home", side: "left", theme: prefersDark ? "dark" : "light",
       pps: 100, viewStart: 0, snap: true, grid: false, gridOpts: { style: "dots", size: 90, color: "blue", opacity: 0.45, snap: true, thirds: false }, tool: "select",
-      graph: true, graphProp: "pos", hdrW: 64, uiScale: 1, viewK: 1, trackSort: "layer", assets: false, selTracks: [], mode3d: false, multi: [], selGroup: null, inGroup: null, cropping: null, panel: null, ctx: null, editingText: null, wheel: null, modal: null, animPreview: null, exporting: false, onion: false, loop: null, leaveAsk: false, pathDraw: null, lineTool: null, toast: null,
+      graph: true, graphProp: "pos", hdrW: 64, uiScale: 1, phoneVid: null, orbit: false, viewK: 1, trackSort: "layer", assets: false, selTracks: [], mode3d: false, multi: [], selGroup: null, inGroup: null, cropping: null, panel: null, ctx: null, editingText: null, wheel: null, modal: null, animPreview: null, exporting: false, onion: false, loop: null, leaveAsk: false, pathDraw: null, lineTool: null, toast: null,
     },
     setT: (t) => set((s) => { s.t = Math.max(0, Math.min(s.project.duration, t)); }),
     togglePlay: () => set((s) => { s.playing = !s.playing; if (s.playing && s.t >= s.project.duration - 1e-3) s.t = 0; }),
@@ -235,7 +239,7 @@ export function openPanelAt(e: { clientX: number; clientY: number }, target: { s
 
 /* remember interface choices (2D/3D, side, theme, track-name width…) across reloads */
 const UI_KEY = "moshion.ui.v1";
-type Prefs = Pick<UIState, "mode3d" | "side" | "theme" | "hdrW" | "uiScale" | "viewK" | "trackSort" | "graph" | "snap" | "grid" | "assets" | "gridOpts">;
+type Prefs = Pick<UIState, "mode3d" | "side" | "theme" | "hdrW" | "uiScale" | "phoneVid" | "viewK" | "trackSort" | "graph" | "snap" | "grid" | "assets" | "gridOpts">;
 if (firstLoad) try {
   const saved = JSON.parse(localStorage.getItem(UI_KEY) ?? "null") as Partial<Prefs> | null;
   if (saved && (saved.hdrW ?? 0) >= 150) delete saved.hdrW; // the old wide default
@@ -247,8 +251,8 @@ if (firstLoad) useStore.subscribe((s) => {
 });
 let lastPrefs = "";
 if (firstLoad) useStore.subscribe((s) => {
-  const { mode3d, side, theme, hdrW, uiScale, viewK, trackSort, graph, snap, grid, assets, gridOpts } = s.ui;
-  const next = JSON.stringify({ mode3d, side, theme, hdrW, uiScale, viewK, trackSort, graph, snap, grid, assets, gridOpts } satisfies Prefs);
+  const { mode3d, side, theme, hdrW, uiScale, phoneVid, viewK, trackSort, graph, snap, grid, assets, gridOpts } = s.ui;
+  const next = JSON.stringify({ mode3d, side, theme, hdrW, uiScale, phoneVid, viewK, trackSort, graph, snap, grid, assets, gridOpts } satisfies Prefs);
   if (next !== lastPrefs) { lastPrefs = next; try { localStorage.setItem(UI_KEY, next); } catch { /* ignore */ } }
 });
 

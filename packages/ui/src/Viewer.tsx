@@ -1,5 +1,4 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { useStacked } from "./layout";
 import type { PinchDetail } from "./touch";
 import type { Item, ItemState, Project, Prop } from "@moshion/engine";
@@ -499,13 +498,6 @@ export function Viewer() {
   // board mode: the preview is an endless plane with every canvas on it
   const board = ui.view === "board";
   const stacked = useStacked();
-  const [pbSlot, setPbSlot] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    if (!stacked) { setPbSlot(null); return; }
-    const find = () => setPbSlot(document.getElementById("pbslot"));
-    find(); const id = requestAnimationFrame(find);
-    return () => cancelAnimationFrame(id);
-  }, [stacked, ui.assets]);
   const [cam, setCam] = useState<Cam | null>(null);
   const [wsize, setWsize] = useState({ w: 0, h: 0 });
   // edit view: zoomed in on the canvas with two fingers (1 = fit); x / y move it from the middle (screen px)
@@ -564,7 +556,7 @@ export function Viewer() {
   const [marquee, setMarquee] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   /** Items the box currently touches, outlined live while dragging. */
   const [mhits, setMhits] = useState<{ id: string; left: number; top: number; width: number; height: number }[]>([]);
-  const [orbit, setOrbit] = useState(false);
+  const orbit = ui.orbit, setOrbit = (on: boolean) => setUI({ orbit: on });
 
   useEffect(() => {
     const el = wrap.current!;
@@ -1343,7 +1335,10 @@ export function Viewer() {
           </>
         );
         // phones: these sit in the play bar under the tracks, so the video gets this row too
-        return pbSlot ? createPortal(bar, pbSlot) : <div className="vbar">{bar}</div>;
+        if (!stacked) return <div className="vbar">{bar}</div>;
+        // phones: onion skin, grid and 3D view are in the menu; only a way back to fit when zoomed in (or on the board)
+        return board && cam ? <button className="chip vfit" onClick={() => setCam(fitCam(rawProject, wsize.w, wsize.h))}>Board · {Math.round(k * 100)}%</button>
+          : zoomed ? <button className="chip on vfit" title="Back to fit" onClick={() => setVz({ z: 1, x: 0, y: 0 })}>{Math.round(k * 100)}% · Fit</button> : null;
       })()}
     </section>
   );
