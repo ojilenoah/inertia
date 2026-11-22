@@ -1526,3 +1526,5 @@ body :is(.cmenu, .pop, .pmenu) svg { shape-rendering: geometricPrecision; }
 body.maskpicking .stagewrap, body.maskpicking .lanes, body.maskpicking .clip { cursor: crosshair !important; }
 .cm-pick span { color: var(--accent); }
 .f2w.pickw { grid-template-columns: minmax(0, 1fr) auto; }
+/* a clip being moved between rows: lifted a little while it follows the pointer */
+.clip.lifting { box-shadow: 0 10px 22px -8px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,255,255,.35); cursor: grabbing; }

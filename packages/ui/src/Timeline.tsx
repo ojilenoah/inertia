@@ -8,7 +8,7 @@ import {
   ownValue, removeKey, removeLookAndTextKeys, ripple, shiftLookAndTextKeys, snap, snapTargets, splitItem, toBezier, ungroupTrack,
 } from "@moshion/engine";
 import type { NumKey } from "@moshion/engine";
-import { itemsInGroup } from "@moshion/engine";
+import { itemsInGroup, orderTracks } from "@moshion/engine";
 import { numAt as numAtE } from "@moshion/engine";
 import { addMarker, copyKeyframe, hasKeyClip, loopIn, loopOut, pasteKeyframe, toggleLock } from "./editing";
 import { AnimatePresence, motion } from "motion/react";
@@ -87,6 +87,18 @@ export function Timeline() {
   const [tlBox, setTlBox] = useState<{ left: number; top: number; width: number; height: number; keys: boolean } | null>(null);
   /** Track under a dragged item: ok = it moved there, !ok = that track is busy at this time. */
   const [drop, setDrop] = useState<{ id: string; ok: boolean; ins?: "above" | "below" } | null>(null);
+  // a clip being moved between rows follows the pointer up and down (dy from its row), then glides into place
+  const [lift, setLift] = useState<{ id: string; dy: number } | null>(null);
+  const glide = useRef<{ id: string; top: number } | null>(null);
+  useLayoutEffect(() => {
+    const g = glide.current;
+    if (!g) return;
+    glide.current = null;
+    const el = rowsRef.current?.querySelector<HTMLElement>(`.clip[data-item="${CSS.escape(g.id)}"]`);
+    if (!el) return;
+    const d = g.top - el.getBoundingClientRect().top;
+    if (Math.abs(d) > 0.5) el.animate([{ transform: `translateY(${d}px)` }, { transform: "none" }], { duration: 220, easing: "cubic-bezier(.2,.8,.2,1)" });
+  });
 
   useEffect(() => {
     const el = lanesRef.current!;
@@ -351,7 +363,8 @@ export function Timeline() {
       }
     };
     let moved = false;
-    let pending: { id: string; below: boolean } | null = null;
+    let pending: { id: string; below: boolean; bottom?: boolean } | null = null;
+    const grabY = e.clientY - r.top; // where in the clip it was grabbed (it stays under the pointer there)
     // dragging near either side of the timeline scrolls it, so items can be lengthened / moved past the view
     const vs0 = useStore.getState().ui.viewStart;
     let scrollAdd = 0;
@@ -380,6 +393,12 @@ export function Timeline() {
           for (const [kid, ks0, ke0] of kids) { const o = p.items.find((i) => i.id === kid); if (o) { o.start = ks0 + ns - s0; o.end = ke0 + ns - s0; } }
           // the row under the pointer takes it when there's room there; if it's busy, a new row opens next to it on release
           pending = null;
+          // below the last track (over the canvas row or empty space): a new track there, on release
+          if (!target) {
+            const rows = [...rowsRef.current!.querySelectorAll<HTMLElement>("[data-track]")].filter((x) => p.tracks.some((tr) => tr.id === x.dataset.track && tr.kind !== "audio"));
+            const last = rows.sort((a2, b2) => a2.getBoundingClientRect().bottom - b2.getBoundingClientRect().bottom).pop();
+            if (last && ev.clientY > last.getBoundingClientRect().bottom - 2) pending = { id: last.dataset.track!, below: true, bottom: true };
+          }
           if (okKind(target)) {
             if (rowFree(p, target!.id, it.start, it.end, item.id)) it.trackId = target!.id;
             else {
@@ -423,14 +442,34 @@ export function Timeline() {
       setSnapAt(hit);
       if (mode === "m") {
         setDrop(pending ? { id: pending.id, ok: true, ins: pending.below ? "below" : "above" } : target && target.id !== item.trackId && okKind(target) ? { id: target.id, ok: true } : null);
+        // follow the pointer up and down from the row it's in now
+        const tid = useStore.getState().project.items.find((i) => i.id === item.id)?.trackId;
+        const row = tid ? rowsRef.current!.querySelector<HTMLElement>(`[data-track="${CSS.escape(tid)}"]`)?.getBoundingClientRect() : undefined;
+        if (row) setLift({ id: item.id, dy: Math.round(ev.clientY - grabY - (row.top + CLIP_PAD)) });
       }
     };
     const up = () => {
       removeEventListener("pointermove", mv); removeEventListener("pointerup", up); setSnapAt(null); setDrop(null);
-      // dropped on a busy row: it gets a new row of its own there; rows left empty close up
+      // where it is on screen now: after it lands in its row it glides there from here
+      if (mode === "m") {
+        const el = rowsRef.current?.querySelector<HTMLElement>(`.clip[data-item="${CSS.escape(item.id)}"]`);
+        if (el && moved) glide.current = { id: item.id, top: el.getBoundingClientRect().top };
+        setLift(null);
+      }
+      // dropped on a busy row: it gets a new row of its own there; below the last track: a new track at the bottom;
+      // rows left empty close up
       if (moved && mode === "m") edit((p) => {
         const it = p.items.find((i) => i.id === item.id);
-        if (it && pending) it.trackId = insertRow(p, pending.id, pending.below);
+        if (it && pending?.bottom) {
+          let n = 1;
+          while (p.tracks.some((tr) => tr.id === `V${n}`)) n++;
+          const nt: Track = { id: `V${n}`, name: `Track ${p.tracks.filter((tr) => tr.kind === "video").length + 1}`, kind: "video" };
+          let at = -1;
+          p.tracks.forEach((tr, i) => { if (tr.kind !== "audio") at = i; });
+          p.tracks.splice(at + 1, 0, nt);
+          orderTracks(p);
+          it.trackId = nt.id;
+        } else if (it && pending) it.trackId = insertRow(p, pending.id, pending.below);
         if (kids.length) settleRows(p, kids.map((k) => k[0]));
       }, false);
       if (moved && mode !== "m" && kidsAt.length) edit((p) => settleRows(p, kidsAt.map((k) => k.id)), false);
@@ -699,8 +738,8 @@ export function Timeline() {
                       return (
                         <div
                           key={it.id}
-                          className={"clip" + (it.kind === "motion" ? " mclip" : "") + (selected === it.id || ui.multi.includes(it.id) ? " sel" : "") + (itemHidden(project, it) ? " hid" : "") + (itemLocked(project, it) ? " lck" : "")} data-item={it.id}
-                          style={{ left, width: Math.max(4, w), top: CLIP_PAD, height: ROW_H - 2 * CLIP_PAD, bottom: "auto", ["--c" as string]: `var(${it.tint})` }}
+                          className={"clip" + (lift?.id === it.id ? " lifting" : "") + (it.kind === "motion" ? " mclip" : "") + (selected === it.id || ui.multi.includes(it.id) ? " sel" : "") + (itemHidden(project, it) ? " hid" : "") + (itemLocked(project, it) ? " lck" : "")} data-item={it.id}
+                          style={{ left, width: Math.max(4, w), top: CLIP_PAD, height: ROW_H - 2 * CLIP_PAD, bottom: "auto", ["--c" as string]: `var(${it.tint})`, ...(lift?.id === it.id ? { transform: `translateY(${lift.dy}px)`, zIndex: 20 } : {}) }}
                           onPointerDown={(e) => clipDown(e, it)}
                           onPointerMove={(e) => {
                             if (ui.tool === "blade") return;
