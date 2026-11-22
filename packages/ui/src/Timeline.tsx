@@ -537,10 +537,12 @@ export function Timeline() {
         <div className="heads">
           <div className="rulerpad">{!phone && <SortButton />}</div>
           <div className="hrows" ref={headsRef} onWheel={(e) => { rowsRef.current!.scrollTop += e.deltaY; }}>
+            <AnimatePresence initial={false}>
             {rows.map((row, i) => row.kind === "graph"
               ? <GraphHead key={"gh" + i} item={row.item} />
               : row.kind === "canvas" ? null
-              : <TrackHead key={row.track.id} track={row.track} alt={i % 2 === 1} selected={ui.selTracks.includes(row.track.id)} />)}
+              : <Fold key={row.track.id} h={row.h}><TrackHead track={row.track} alt={i % 2 === 1} selected={ui.selTracks.includes(row.track.id)} /></Fold>)}
+            </AnimatePresence>
           </div>
           {/* the canvas has its own fixed row under the scrolling rows */}
           <CanvasHead project={project} h={canvasH(project)} />
@@ -613,10 +615,12 @@ export function Timeline() {
             style={fpx > 14 ? { backgroundImage: `repeating-linear-gradient(90deg,transparent 0 ${fpx - 1}px,color-mix(in srgb,var(--ink) 7%,transparent) ${fpx - 1}px ${fpx}px)`, backgroundPosition: `${PAD - ((viewStart * project.fps) % 1) * fpx}px 0` } : undefined}
           >
             {tlBox && <div className={"tlbox" + (tlBox.keys ? " keys" : "")} style={{ left: tlBox.left, top: tlBox.top, width: tlBox.width, height: tlBox.height }} />}
+            <AnimatePresence initial={false}>
             {rows.map((row, i) => row.kind === "graph"
               ? <GraphRow key={"g" + i} item={row.item} group={row.group} W={W} x={x} tOf={tOf} />
               : row.kind === "canvas" ? null
               : (
+                <Fold key={row.track.id} h={row.h}>
                 <div
                   key={row.track.id}
                   className={"lrow" + (row.track.kind === "group" ? " grp" : row.track.parent ? " ch" : i % 2 ? " alt" : "") + (drop?.id === row.track.id ? (drop.ins ? " drop-" + drop.ins : drop.ok ? " drop-ok" : " drop-no") : "")}
@@ -742,8 +746,9 @@ export function Timeline() {
                         </div>
                       );
                     })}
-                </div>
+                </div></Fold>
               ))}
+            </AnimatePresence>
           </div>
           {snapAt != null && <div className="snapline" style={{ left: x(snapAt) }} />}
           <div className="cvdock"><CanvasRow h={canvasH(project)} x={x} pps={pps} tOf={tOf} /></div>
@@ -926,6 +931,17 @@ function Marker({ mk, left }: { mk: { id: string; t: number; label: string; note
 
 /** The video's length: follows the last item (Auto), or a value you type / drag. */
 /** Cycle how the track list is ordered: layer order (the real front-to-back order), or by type, start time, creation or name. */
+/** A track row folding open or shut (a group's rows when it folds), quickly; the names column and the tracks move together. */
+function Fold({ h, children }: { h: number; children: React.ReactNode }) {
+  return (
+    // clipped only while it moves (afterwards things that poke out of a row, like the add-track button, show again)
+    <motion.div className="fold" initial={{ height: 0, opacity: 0, overflow: "hidden" }} animate={{ height: h, opacity: 1, transitionEnd: { overflow: "visible" } }}
+      exit={{ height: 0, opacity: 0, overflow: "hidden" }} transition={{ duration: 0.16, ease: [0.3, 0.7, 0.2, 1] }}>
+      {children}
+    </motion.div>
+  );
+}
+
 function SortButton() {
   const sort = useStore((s) => s.ui.trackSort ?? "layer");
   const i = Math.max(0, TRACK_SORTS.findIndex((q) => q.id === sort));
