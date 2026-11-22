@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { motion } from "motion/react";
+import { anim } from "./anim";
 import { ArrayBufferTarget, Muxer } from "mp4-muxer";
 import type { Project } from "@moshion/engine";
 import { useStore } from "./store";
@@ -222,8 +224,8 @@ export function ExportDialog() {
   };
 
   return (
-    <div className="xback" onPointerDown={(e) => { if (e.target === e.currentTarget) close(); }}>
-      <div className="xbox">
+    <motion.div {...anim.fade} className="xback" onPointerDown={(e) => { if (e.target === e.currentTarget) close(); }}>
+      <motion.div {...anim.sheet} className="xbox">
         <div className="xhead"><b>Export</b><span className="sp" />{phase.k !== "run" && <button className="xclose" onClick={close} aria-label="Close">×</button>}</div>
         {phase.k === "setup" || phase.k === "error" ? (
           <>
@@ -282,7 +284,7 @@ export function ExportDialog() {
             <a className="hcreate xgo" href={phase.url} download={phase.name}>Download again</a>
           </>
         )}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

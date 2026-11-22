@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { anim } from "./anim";
 import { addKey, fmtClock, groupItems, groupOf, groupTracks, splitItem, ungroupTrack } from "@moshion/engine";
 import { deleteSelection, isVertical, useStore } from "./store";
 import { Viewer } from "./Viewer";
@@ -15,6 +16,7 @@ import { openNewerCopy, putProject, restorePictures, startLibrarySync, syncWithD
 import { diskInit } from "./disk";
 import { Timeline, addChannelKey, channelProps, chLabel } from "./Timeline";
 import { Header, Rail } from "./Panels";
+import { applyUiScale, isStacked, useWindowSize } from "./layout";
 import { EditPanel, TrackBar } from "./EditPanel";
 import { Tooltips } from "./Tooltips";
 import { CanvasMenu, duplicate, layer } from "./CanvasMenu";
@@ -22,12 +24,10 @@ import { openProject, saveProject, startAutosave } from "./persist";
 import "./styles.css";
 
 function useLayoutVars(vertical: boolean, aspect: number, media: boolean, f = 1) {
-  const [size, setSize] = useState({ w: innerWidth, h: innerHeight });
-  useEffect(() => {
-    const on = () => setSize({ w: innerWidth, h: innerHeight });
-    addEventListener("resize", on);
-    return () => removeEventListener("resize", on);
-  }, []);
+  const size = useWindowSize();
+  // upright phone: the video takes the full width, up to a bit under half the height
+  // (no top bar there, and the tools sit beside the video)
+  const sh = Math.round(Math.max(160, Math.min((size.h - 6) * 0.6, (size.w - 6 - 45) / aspect)));
   const vw = Math.round(Math.min(size.w * 0.75, Math.max(200, Math.min(size.w * 0.4, ((size.h - 6 - 34) * 9) / 16) * f)));
   const rows = size.h - 6;
   // horizontal: the video row takes ~58% of the height, the timeline the rest
@@ -37,7 +37,7 @@ function useLayoutVars(vertical: boolean, aspect: number, media: boolean, f = 1)
   const maxVh = Math.round(rows * (media ? 0.62 : 1));
   if (vh > maxVh) { vh = maxVh; hw = Math.round((vh - 34) * aspect); }
   vh = Math.max(vh, 140);
-  return { ["--vw" as string]: `${vw}px`, ["--hw" as string]: `${hw}px`, ["--vh" as string]: `${vh}px`, vertical } as const;
+  return { ["--vw" as string]: `${vw}px`, ["--hw" as string]: `${hw}px`, ["--vh" as string]: `${vh}px`, ["--sh" as string]: `${sh}px`, vertical, stacked: isStacked(size.w, size.h) } as const;
 }
 
 function usePlayback() {
@@ -176,7 +176,7 @@ export function Editor() {
   const project = useStore((s) => s.project);
   const ui = useStore((s) => s.ui);
   const vertical = isVertical(project);
-  const { vertical: _v, ...vars } = useLayoutVars(vertical, project.width / project.height, true, ui.view === "board" ? ui.viewK ?? 1 : 1);
+  const { vertical: _v, stacked, ...vars } = useLayoutVars(vertical, project.width / project.height, true, ui.view === "board" ? ui.viewK ?? 1 : 1);
   usePlayback();
   useShortcuts();
   useEffect(() => startAutosave(), []);
@@ -207,17 +207,20 @@ export function Editor() {
       if (Object.keys(localStorage).some((k) => k.startsWith("moshion.autosave.v1"))) putProject(useStore.getState().project).catch(() => {});
     } catch { /* storage unavailable */ }
   }, []);
-  const layout = `${vertical ? "v" : "h"}-${ui.side}`;
+  // upright phone: stacked, the video on top; otherwise side by side
+  const layout = stacked ? "s-top" : `${vertical ? "v" : "h"}-${ui.side}`;
+  const media = stacked ? ui.assets : ui.assets || !vertical;
   const framed = hasTitleBar();
+  useEffect(() => applyUiScale(ui.uiScale ?? 1), [ui.uiScale]);
   return (
-    <div className={"mo" + (framed ? " framed" : "")} data-theme={ui.theme} style={vars as React.CSSProperties} onContextMenu={(e) => e.preventDefault()}>
+    <div className={"mo" + (framed ? " framed" : "") + (stacked ? " phone" : "")} data-theme={ui.theme} style={vars as React.CSSProperties} onContextMenu={(e) => e.preventDefault()}>
       {framed && <TitleBar />}
       {ui.view === "home" ? <Home /> : ui.view === "edit" || ui.view === "board" ? (
-        <div className={"ws " + layout + (ui.assets || !vertical ? " am" : "")}>
-          <Header />
+        <div className={"ws " + layout + (media ? " am" : "")}>
+          {!stacked && <Header />}
           <Viewer />
           <Rail />
-          {(ui.assets || !vertical) && <Assets />}
+          {media && <Assets />}
           <Timeline />
         </div>
       ) : (
@@ -232,9 +235,9 @@ export function Editor() {
       <EditPanel />
       <ExportDialog />
       <ConfirmBubble />
-      {ui.leaveAsk && (
-        <div className="xback" onPointerDown={(e) => { if (e.target === e.currentTarget) useStore.getState().setUI({ leaveAsk: false }); }}>
-          <div className="xbox" style={{ width: 320 }}>
+      <AnimatePresence>{ui.leaveAsk && (
+        <motion.div {...anim.fade} className="xback" onPointerDown={(e) => { if (e.target === e.currentTarget) useStore.getState().setUI({ leaveAsk: false }); }}>
+          <motion.div {...anim.sheet} className="xbox" style={{ width: 320 }}>
             <div className="xhead"><b>Leave Inertia?</b></div>
             <div className="xrow"><span>Your project is saved. Going back leaves the app.</span></div>
             <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
@@ -243,9 +246,9 @@ export function Editor() {
               <button className="hlink" onClick={() => dispatchEvent(new Event("moshion-leave"))}>Leave</button>
               <button className="hcreate" autoFocus onClick={() => useStore.getState().setUI({ leaveAsk: false })}>Stay</button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        </motion.div>
+      )}</AnimatePresence>
       <AnimatePresence>
         {ui.toast && (
           <motion.div key={ui.toast} className="toast" initial={{ opacity: 0, y: 12, x: "-50%" }} animate={{ opacity: 1, y: 0, x: "-50%" }} exit={{ opacity: 0, y: 8, x: "-50%" }} transition={{ type: "spring", stiffness: 500, damping: 34 }}>

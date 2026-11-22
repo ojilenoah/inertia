@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Item, ItemKind, Project } from "@moshion/engine";
 import { activeBackground, fmtTimecode, placeItem, uid } from "@moshion/engine";
 import { isVertical, useStore } from "./store";
@@ -7,15 +8,25 @@ import { addCamera, addMotion } from "./MotionPath";
 import { HistoryButton, RedoButton, UndoButton } from "./History";
 import { ShapePicker } from "./Shapes";
 import { Icon, PlayIcon } from "./Icon";
+import { canScaleUi, useStacked } from "./layout";
+import { motion } from "motion/react";
+import { anim } from "./anim";
 
 /* ---------------- header: projects, title, views, export ---------------- */
+/** Save, then back to the projects screen. */
+async function goHome() {
+  await putProject(useStore.getState().project).catch(() => {});
+  useStore.setState({ playing: false });
+  useStore.getState().setUI({ view: "home", panel: null, ctx: null });
+}
+
 export function Header() {
   const ui = useStore((s) => s.ui);
   const project = useStore((s) => s.project);
   const { setUI } = useStore.getState();
   return (
     <header className="card head">
-      <button className="ib" title="All projects" aria-label="All projects" onClick={async () => { await putProject(useStore.getState().project).catch(() => {}); useStore.setState({ playing: false }); setUI({ view: "home", panel: null, ctx: null }); }}><Icon name="board" /></button>
+      <button className="ib" title="All projects" aria-label="All projects" onClick={goHome}><Icon name="board" /></button>
       <div className="ptitle">
         <span className="lbl">{project.width}×{project.height} · {project.fps} fps</span>
         <input
@@ -37,6 +48,60 @@ export function Header() {
   );
 }
 
+/**
+ * Phone held upright: no top bar. The menu button sits at the top of the tools sidebar; its menu holds the project's
+ * name, Export, the views, the interface size, the theme and the way back to all projects.
+ */
+export function PhoneMenu() {
+  const ui = useStore((s) => s.ui);
+  const project = useStore((s) => s.project);
+  const issue = useStore((s) => s.saveIssue);
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null);
+  const { setUI } = useStore.getState();
+  const close = () => setAt(null);
+  return (
+    <>
+      <button className={"ib pmbtn" + (at ? " on" : "")} title={issue ? "Menu · not saved" : "Menu"} aria-label="Menu"
+        onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setAt(at ? null : { x: r.right + 8, y: r.top }); }}>
+        <Icon name="menu" />{issue && <i className="pmdot" />}
+      </button>
+      {at && (
+        <>
+          <div className="pmback" onPointerDown={close} />
+          <motion.div {...anim.pop} className="pmenu" style={{ left: at.x, top: at.y }}>
+            <div className="pmname">
+              <input className="pname" value={project.name} aria-label="Project name"
+                onFocus={() => useStore.getState().checkpoint()}
+                onChange={(e) => useStore.getState().edit((p) => { p.name = e.target.value; }, false)}
+                onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter" || e.key === "Escape") (e.target as HTMLInputElement).blur(); }} />
+              <span className="lbl">{project.width}×{project.height} · {project.fps} fps</span>
+            </div>
+            <SaveWarning />
+            <button className="pmitem pmexport" onClick={() => { close(); setUI({ exporting: true }); }}><Icon name="export" />Export</button>
+            <div className="pmrow"><em>View</em>
+              <div className="seg" role="group" aria-label="View">
+                {([["edit", "edit", "Edit"], ["nodes", "nodes", "Nodes"], ["board", "board", "Board"]] as const).map(([v, ic, label]) => (
+                  <button key={v} className={ui.view === v ? "on" : ""} title={label} aria-label={label} onClick={() => { setUI({ view: v, wheel: null, modal: null }); close(); }}><Icon name={ic} /></button>
+                ))}
+              </div>
+            </div>
+            <div className="pmrow" title={canScaleUi() ? "Smaller controls leave more room for the video" : "Works on phones and in the desktop app. In a desktop browser, use Ctrl − and Ctrl + instead."}><em>Interface size</em>
+              <div className="seg" role="group" aria-label="Interface size">
+                {[1, 0.85, 0.7, 0.6].map((k) => (
+                  <button key={k} className={(ui.uiScale ?? 1) === k ? "on" : ""} title={k === 1 ? "Normal" : `${Math.round(k * 100)}%: smaller controls, more room for the video`} onClick={() => setUI({ uiScale: k })}>{Math.round(k * 100)}</button>
+                ))}
+              </div>
+            </div>
+            {!canScaleUi() && <p className="pmhint">Interface size works on phones and in the desktop app. In a desktop browser, use Ctrl − and Ctrl + instead.</p>}
+            <button className="pmitem" onClick={() => setUI({ theme: ui.theme === "dark" ? "light" : "dark" })}><Icon name={ui.theme === "dark" ? "moon" : "sun"} />{ui.theme === "dark" ? "Dark" : "Light"} theme</button>
+            <button className="pmitem" onClick={goHome}><Icon name="board" />All projects</button>
+          </motion.div>
+        </>
+      )}
+    </>
+  );
+}
+
 /** A small warning when the open project couldn't be saved; click it to try again. */
 function SaveWarning() {
   const issue = useStore((s) => s.saveIssue);
@@ -54,7 +119,10 @@ function SaveWarning() {
 export function PlayerBar() {
   const ui = useStore((s) => s.ui);
   const vertical = useStore((s) => isVertical(s.project));
+  const stacked = useStacked();
   const { setUI } = useStore.getState();
+  const sideTip = `Put the video on the ${ui.side === "left" ? "right" : "left"}`;
+  const sideTurn = ui.side === "right" ? "scaleX(-1)" : undefined;
   return (
     <div className="pbar">
       <Transport />
@@ -65,13 +133,15 @@ export function PlayerBar() {
       <span className="pbsep" />
       <UndoButton />
       <RedoButton />
+      {stacked ? <span className="pbslot" id="pbslot" /> : <>
       <HistoryButton />
       <span className="sp" />
-      <button className="ib" title={`Put the video on the ${ui.side === "left" ? "right" : "left"}`} onClick={() => setUI({ side: ui.side === "left" ? "right" : "left" })}>
-        <span style={{ display: "inline-flex", transform: ui.side === "right" ? "scaleX(-1)" : undefined }}><Icon name="side" /></span>
+      <button className="ib" title={sideTip} aria-label={sideTip} onClick={() => setUI({ side: ui.side === "left" ? "right" : "left" })}>
+        <span style={{ display: "inline-flex", transform: sideTurn }}><Icon name="side" /></span>
       </button>
       <span className="pbar-ratio" title="Layout follows the video shape">{vertical ? "Tall" : "Wide"}</span>
       <button className="ib" title="Toggle theme" onClick={() => setUI({ theme: ui.theme === "dark" ? "light" : "dark" })}><Icon name={ui.theme === "dark" ? "moon" : "sun"} /></button>
+      </>}
     </div>
   );
 }
@@ -145,10 +215,12 @@ export function addItem(spec: Partial<Item>) {
 export function Rail() {
   const assetsOn = useStore((s) => s.ui.assets);
   const wide = useStore((s) => !isVertical(s.project));
+  const stacked = useStacked();
   const tools: [string, string, string][] = [["text", "type", "Text"], ["glass", "drop", "Liquid glass (effect shape)"]];
   const lineTool = useStore((s) => s.ui.lineTool);
   return (
     <nav className="card rail" aria-label="Tools">
+      {stacked && <><PhoneMenu /><HistoryButton /><hr /></>}
       <button className="ib on" title="Select (V)" aria-label="Select"><Icon name="cursor" /></button>
       <hr />
       <ShapePicker />
@@ -160,7 +232,7 @@ export function Rail() {
       <button className="ib" title="Motion path: an invisible clip you draw a path for, then link objects to it" aria-label="Add motion path" onClick={() => addMotion()}><Icon name="motion" /></button>
       <button className="ib" title="Camera: pan, zoom and turn the whole view with keyframes (select it to adjust its frame)" aria-label="Add camera" onClick={() => addCamera()}><Icon name="camera" /></button>
       <hr />
-      {!wide && <button className={"ib" + (assetsOn ? " on" : "")} title="Media: imported pictures, videos and audio" aria-label="Media" onClick={() => useStore.getState().setUI({ assets: !assetsOn })}><Icon name="image" /></button>}
+      {(!wide || stacked) && <button className={"ib" + (assetsOn ? " on" : "")} title="Media: imported pictures, videos and audio" aria-label="Media" onClick={() => useStore.getState().setUI({ assets: !assetsOn })}><Icon name="image" /></button>}
       <button className="ib" title="Import pictures, videos or audio" aria-label="Import media" onClick={async () => {
         const f = await pickMedia();
         if (!f.length) return;

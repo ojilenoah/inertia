@@ -11,6 +11,7 @@ import { openPanelAt, pickedCount, pickedOn, useStore } from "./store";
 import { Icon } from "./Icon";
 import { placeAsset } from "./media";
 import { PlayerBar } from "./Panels";
+import { useAppliedUiScale, useStacked } from "./layout";
 import { Fader } from "./Fader";
 import { askConfirm } from "./Confirm";
 import { PEAKS_PER_SEC, usePeaks } from "./waveform";
@@ -30,8 +31,14 @@ type Row =
   | { kind: "canvas"; h: number };
 
 const canvasH = (_p: Project) => ROW_H;
-/** Height of a row in the timeline (clips are ROW_H - 8 tall). */
-const ROW_H = 32;
+/** Height of a row in the timeline (clips are ROW_H - 2 × CLIP_PAD tall). Phones use thinner rows (set by the timeline). */
+let ROW_H = 32, CLIP_PAD = 4;
+/** Phones: thin rows that keep the same size on screen whatever the interface size. */
+function setRowSize(phone: boolean, uiScale: number) {
+  const k = Math.min(1, Math.max(0.5, uiScale || 1));
+  ROW_H = phone ? Math.round(24 / k) : 32;
+  CLIP_PAD = phone ? Math.round(3 / k) : 4;
+}
 
 /** Normal and group tracks, then audio tracks, then the canvas track at the very bottom. */
 /** A group's own keys look like an item spanning the whole scene, so the same graph editor works on them. */
@@ -48,7 +55,7 @@ function visibleRows(p: Project, selected: string | null, graph: boolean, selGro
   const push = (tr: Track) => {
     // hidden while any group around it is folded
     for (let par = tr.parent, n = 0; par && n < 20; n++) { const g = p.tracks.find((x) => x.id === par); if (!g) break; if (!g.open) return; par = g.parent; }
-    rows.push({ kind: "track", track: tr, h: tr.kind === "group" ? 30 : ROW_H });
+    rows.push({ kind: "track", track: tr, h: tr.kind === "group" && ROW_H >= 30 ? 30 : ROW_H });
     if (graph && !sel && tr.kind === "group" && selGroup === tr.id && Object.values(tr.keys ?? {}).some((k) => k && k.length)) rows.push({ kind: "graph", item: groupAsItem(p, tr), h: GRAPH_H, group: tr.id });
     if (graph && sel && sel.trackId === tr.id && sel.kind !== "audio" && (Object.values(sel.keys).some((k) => k && k.length) || !!sel.numKeys?.pathOffset?.length || !!sel.numKeys?.pathGap?.length)) rows.push({ kind: "graph", item: sel, h: GRAPH_H });
   };
@@ -94,7 +101,11 @@ export function Timeline() {
   const tOf = (px: number) => (px - PAD) / pps + viewStart;
   // the playhead "touches" a keyframe when it is within ~7px of it at this zoom
   keySnap.s = Math.min(0.5, Math.max(0.02, 7 / ui.pps));
-  const rows = useMemo(() => visibleRows(project, selected, ui.graph, ui.selGroup, ui.trackSort), [project, selected, ui.graph, ui.selGroup, ui.trackSort]);
+  const phone = useStacked();
+  // rows keep their size on screen at whatever interface size is really in effect
+  const uiK = useAppliedUiScale();
+  setRowSize(phone, uiK);
+  const rows = useMemo(() => visibleRows(project, selected, ui.graph, ui.selGroup, ui.trackSort), [project, selected, ui.graph, ui.selGroup, ui.trackSort, phone, uiK]);
 
   // ruler
   const major = NICE_STEPS.find((n) => n * pps >= 90) ?? 600;
@@ -109,7 +120,7 @@ export function Timeline() {
     ticks.push({ x: px, maj, label: maj ? fmtTick(Math.max(0, tt), major) : undefined });
   }
   const span = W / pps;
-  const unit = span > 120 ? "minutes" : span > 4 ? "seconds" : span > 0.25 ? "frames" : span > 0.01 ? "milliseconds" : "sub-ms";
+  const unit = span > 120 ? "min" : span > 4 ? "s" : span > 0.25 ? "frames" : span > 0.01 ? "ms" : "sub-ms";
   const fpx = pps / project.fps;
 
   function zoomTo(p: number, anchorX = x(t)) {
@@ -389,7 +400,7 @@ export function Timeline() {
   const tools: [typeof ui.tool, string, string][] = [["select", "cursor", "Select (V)"], ["blade", "scissors", "Blade: click an item to cut it there (B)"], ["ripple", "ripple", "Ripple: trims and deletes close the gap (R)"]];
 
   return (
-    <section className="card timeline" aria-label="Timeline">
+    <section className="card timeline" aria-label="Timeline" style={{ ["--rowh" as string]: `${ROW_H}px`, ["--clippad" as string]: `${CLIP_PAD}px` }}>
       <div className="tlbar">
         <div className="seg sm" role="group" aria-label="Timeline tool">
           {tools.map(([id, ic, tip]) => (
@@ -401,8 +412,8 @@ export function Timeline() {
         <button className={"ib" + (ui.snap ? " on" : "")} title="Snapping (N)" onClick={() => setUI({ snap: !ui.snap })}><Icon name="magnet" /></button>
         <button className="ib" title="Add keyframe to the selected item (K)" onClick={() => addKeyAtPlayhead()}><Icon name="diamond" /></button>
         <button className={"ib" + (ui.graph ? " on" : "")} title="Keyframe graph under the selected item (C)" onClick={() => setUI({ graph: !ui.graph })}><Icon name="curve" /></button>
-        <div className="sep" />
-        {groupBtn()}
+        {/* phones: no group / ungroup button here */}
+        {!phone && <><div className="sep" />{groupBtn()}</>}
         <span className="sp" />
         <div className="zoomer">
           <span className="zunit" title="How much time the view spans, and the gap between ruler ticks">{unit} · tick {fmtStep(minor)}</span>
@@ -507,7 +518,7 @@ export function Timeline() {
                         <div
                           key={it.id}
                           className={"clip" + (it.kind === "motion" ? " mclip" : "") + (selected === it.id || ui.multi.includes(it.id) ? " sel" : "") + (itemHidden(project, it) ? " hid" : "") + (itemLocked(project, it) ? " lck" : "")} data-item={it.id}
-                          style={{ left, width: Math.max(4, w), top: 4, height: ROW_H - 8, bottom: "auto", ["--c" as string]: `var(${it.tint})` }}
+                          style={{ left, width: Math.max(4, w), top: CLIP_PAD, height: ROW_H - 2 * CLIP_PAD, bottom: "auto", ["--c" as string]: `var(${it.tint})` }}
                           onPointerDown={(e) => clipDown(e, it)}
                           onPointerMove={(e) => {
                             if (ui.tool === "blade") return;
@@ -1113,7 +1124,7 @@ function CanvasRow({ h, x, pps, tOf }: { h: number; x: (t: number) => number; pp
         return (
           <div key={b.id || "canvas"} data-cv={b.id} className={"clip fxclip bgclip cvseg" + (on ? " sel" : "") + (light ? " light" : "")}
             title={`Canvas${b.id ? ` · ${b.name}` : ""} · click for options · Blade splits it`}
-            style={{ left: x(b.start), width: Math.max(4, (b.end - b.start) * pps), top: 4, height: ROW_H - 8, bottom: "auto", ["--c" as string]: "var(--gray)" }}
+            style={{ left: x(b.start), width: Math.max(4, (b.end - b.start) * pps), top: CLIP_PAD, height: ROW_H - 2 * CLIP_PAD, bottom: "auto", ["--c" as string]: "var(--gray)" }}
             onPointerDown={(e) => {
               if (!b.id) { if (e.button !== 0) return; e.stopPropagation(); useStore.getState().select(null); setUI({ wheel: null, ctx: null, panel: null }); setBar({ id: "", x: e.clientX }); return; }
               down(e, b, "backgrounds");

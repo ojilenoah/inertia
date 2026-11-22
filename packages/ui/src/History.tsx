@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { anim } from "./anim";
 import type { Project } from "@moshion/engine";
 import { useStore } from "./store";
 import { Icon } from "./Icon";
@@ -65,8 +67,8 @@ export function HistoryButton() {
   return (
     <div className="histwrap" ref={ref}>
       <button className={"ib" + (open ? " on" : "")} title="History: every change, and saved versions" onClick={() => setOpen(!open)}><Icon name="history" /></button>
-      {open && (
-        <div className="histpop">
+      <AnimatePresence>{open && (
+        <motion.div {...anim.pop} className="histpop">
           <div className="psub" style={{ marginTop: 0 }}>Changes</div>
           <div className="histlist">
             {[...future].map((_, i) => future.length - i).map((n) => (
@@ -89,8 +91,8 @@ export function HistoryButton() {
               </button>
             )) : <p className="hint">A version is kept every few minutes while you work (the last 10).</p>}
           </div>
-        </div>
-      )}
+        </motion.div>
+      )}</AnimatePresence>
     </div>
   );
 }

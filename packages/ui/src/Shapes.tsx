@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { motion } from "motion/react";
+import { anim } from "./anim";
 import { createPortal } from "react-dom";
 import type { Item, LineSpec, ShapeSpec } from "@moshion/engine";
 import { SHAPES_LIST, placeItem, shapeD, smoothStroke, uid } from "@moshion/engine";
@@ -48,7 +50,7 @@ export function ShapePicker() {
     <div style={{ position: "relative" }} ref={ref}>
       <button className={"ib" + (open ? " on" : "")} title="Shapes" aria-label="Add a shape" onClick={() => setOpen(!open)}><Icon name="shapes" /></button>
       {open && createPortal(
-        <div className="shpop" ref={popRef} style={{ position: "fixed", ...popPos() }}>
+        <motion.div {...anim.pop} className="shpop" ref={popRef} style={{ position: "fixed", ...popPos() }}>
           <div className="psub">Shapes · edit points, rounding & more in the Shape card</div>
           <div className="shgrid">
             {SHAPES_LIST.map((x) => <button key={x.type} title={x.label} onClick={() => add(x.type)}><ShapeIcon spec={x.spec} /></button>)}
@@ -59,7 +61,7 @@ export function ShapePicker() {
             <button onClick={() => { setOpen(false); addChart(); }}>Chart</button>
             {(["confetti", "sparks", "snow", "dust"] as const).map((k) => <button key={k} onClick={() => { setOpen(false); addParticles(k); }}>{k[0].toUpperCase() + k.slice(1)}</button>)}
           </div>
-        </div>,
+        </motion.div>,
         document.querySelector(".mo") ?? document.body,
       )}
     </div>

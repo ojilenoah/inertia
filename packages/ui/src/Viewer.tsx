@@ -1,4 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useStacked } from "./layout";
 import type { Item, ItemState, Project, Prop } from "@moshion/engine";
 import { groupPivot, sampleKeys, addKey, composeRotation, groupChain, magicFrame, blurTrail, cameraAt, lookAt, textShown, stackAt as stackAtTime, stackCompare, boardPos, canvases, itemHidden, itemLocked, resolveFx, resolveScene, transLayers, transitionAt } from "@moshion/engine";
 import type { Layer } from "@moshion/engine";
@@ -495,6 +497,14 @@ export function Viewer() {
   const [kFit, setK] = useState(0.3);
   // board mode: the preview is an endless plane with every canvas on it
   const board = ui.view === "board";
+  const stacked = useStacked();
+  const [pbSlot, setPbSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!stacked) { setPbSlot(null); return; }
+    const find = () => setPbSlot(document.getElementById("pbslot"));
+    find(); const id = requestAnimationFrame(find);
+    return () => cancelAnimationFrame(id);
+  }, [stacked, ui.assets]);
   const [cam, setCam] = useState<Cam | null>(null);
   const [wsize, setWsize] = useState({ w: 0, h: 0 });
   const k = board && cam ? cam.z : kFit;
@@ -1277,7 +1287,9 @@ export function Viewer() {
       )}
       {ui.mode3d && sel && selState?.visible && <RotationGimbal itemId={sel.id} s={selState} onExit={() => setUI({ mode3d: false })} />}
       {ui.mode3d && !sel && selGroupTrack && <RotationGimbal itemId={null} trackId={selGroupTrack.id} s={groupValues(selGroupTrack, t)} onExit={() => setUI({ mode3d: false })} />}
-      <div className="vbar">
+      {(() => {
+        const bar = (
+          <>
         <button
           className="chip"
           title="Switch between vertical and horizontal"
@@ -1295,7 +1307,11 @@ export function Viewer() {
         <button className={"ib" + (ui.onion ? " on" : "")} title="Onion skin: see the selected item faintly at its previous (pink) and next (blue) keyframes; masked items and hidden masks show faintly in full, with marching ants round them" onClick={() => setUI({ onion: !ui.onion })}><Icon name="frame" /></button>
         <GridButton />
         <button className={"ib" + (orbit ? " on" : "")} title="3D orbit view" onClick={() => setOrbit(!orbit)}><Icon name="cube" /></button>
-      </div>
+          </>
+        );
+        // phones: these sit in the play bar under the tracks, so the video gets this row too
+        return pbSlot ? createPortal(bar, pbSlot) : <div className="vbar">{bar}</div>;
+      })()}
     </section>
   );
 }

@@ -21,3 +21,4 @@ Ideas and features we've agreed to do later. Newest at the top.
 - Nodes view (transitions between items) and Board view (all scenes on one canvas)
 - Export extras: GIF / WebM / PNG sequence, transparent video, export a time range
 - GitHub repo + cloud builds for the Windows .exe and Android .apk (workflow is in `.github/workflows/build.yml`)
+- Lens blur (2026-11-21): since the looks layer fix it shows again, but its edges look whitish/washed out compared with before (the blur pulls in what's outside the canvas). Revisit: clamp the blur to the canvas so the edges stay true.

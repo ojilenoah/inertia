@@ -1221,3 +1221,99 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .tbctl button:hover { background: color-mix(in srgb, var(--ink) 9%, transparent); color: var(--ink); }
 .tbctl button.tbx:hover { background: #e81123; color: #fff; }
 .tbctl svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1; shape-rendering: crispEdges; }
+
+/* ---------- phone held upright: stacked like a phone video editor ----------
+   the tools run down a thin sidebar beside the video; the tracks sit under it (or above, with the video at the bottom).
+   No top bar: the menu (with Export) is the sidebar's first button. Media takes the tracks' place. */
+.ws.s-top, .ws.s-bottom { grid-template-columns: 42px minmax(0, 1fr); }
+.ws.s-top { grid-template-rows: var(--sh) minmax(0, 1fr); grid-template-areas: "rail viewer" "timeline timeline"; }
+.ws.s-bottom { grid-template-rows: minmax(0, 1fr) var(--sh); grid-template-areas: "timeline timeline" "rail viewer"; }
+.ws.s-top.am { grid-template-areas: "rail viewer" "assets assets"; }
+.ws.s-bottom.am { grid-template-areas: "assets assets" "rail viewer"; }
+.ws.s-top.am > .timeline, .ws.s-bottom.am > .timeline { display: none; }
+.ws.s-top .rail, .ws.s-bottom .rail { padding: 4px 0; overflow-y: auto; overflow-x: hidden; }
+.ws.s-top .rail > *, .ws.s-bottom .rail > * { flex: none; }
+.ws.s-top .rail .ib, .ws.s-bottom .rail .ib { width: 32px; height: 32px; }
+.ws.s-top .rail hr, .ws.s-bottom .rail hr { margin: 4px 0; }
+/* the menu button at the top of the sidebar, and its menu */
+.pmbtn { position: relative; }
+.pmdot { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: #e5484d; box-shadow: 0 0 0 2px var(--panel); }
+.pmback { position: fixed; inset: 0; z-index: 110; pointer-events: auto; }
+.pmenu { position: fixed; z-index: 120; width: min(270px, calc(100vw - 24px)); display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 12px; background: var(--panel); box-shadow: 0 0 0 1px var(--line), 0 18px 44px -14px rgba(0,0,0,.55); }
+.pmname { display: flex; flex-direction: column; gap: 2px; }
+.pmname .pname { width: 100%; font-size: 15px !important; }
+.pmname .lbl { font: 500 10.5px var(--mono); color: var(--ink-3); }
+.pmrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pmrow em { font: 500 12px var(--sans); font-style: normal; color: var(--ink-2); }
+.pmrow .seg button { min-width: 30px; height: 26px; font: 500 11px var(--mono); }
+.pmitem { height: 34px; display: flex; align-items: center; gap: 9px; padding: 0 8px; margin: 0 -4px; border-radius: 8px; font: 500 13px var(--sans); color: var(--ink); }
+.pmitem:hover { background: var(--panel-2); }
+/* slimmer bars under the video, so the video gets the height */
+.ws.s-top .tlbar, .ws.s-bottom .tlbar { height: 28px; padding: 0 4px; gap: 2px; overflow-x: auto; overflow-y: hidden; }
+.ws.s-top .tlbar > *, .ws.s-bottom .tlbar > * { flex: none; }
+.ws.s-top .pbar, .ws.s-bottom .pbar { height: 38px; overflow-x: auto; overflow-y: hidden; }
+.ws.s-top .pbar > *, .ws.s-bottom .pbar > * { flex: none; }
+.ws.s-top .pbar .sp, .ws.s-bottom .pbar .sp { flex: 1; }
+.ws.s-top .tcm, .ws.s-bottom .tcm, .ws.s-top .pbar-ratio, .ws.s-bottom .pbar-ratio { display: none; }
+.ws.s-top .tc, .ws.s-bottom .tc { min-width: 0; font-size: 15px; }
+/* phones: everything still scrolls, but no scrollbars are ever drawn */
+.mo.phone *, .mo.phone *:hover { scrollbar-width: none; }
+.mo.phone *::-webkit-scrollbar { display: none; }
+@media (pointer: coarse) {
+  .mo *, .mo *:hover { scrollbar-width: none; }
+  .mo *::-webkit-scrollbar { display: none; }
+}
+/* phones: only the top time ruler (no second one under the canvas row) */
+.mo.phone .ruler.bottom, .mo.phone .phtag.bot, .mo.phone .rulerpad.bot { display: none; }
+.mo.phone .cvdock { bottom: 0; }
+.mo.phone .lanes .lrows { bottom: var(--rowh, 32px); }
+.pmexport { background: var(--ink); color: var(--panel); margin: 0; justify-content: center; font-weight: 600; }
+.pmexport:hover { background: var(--ink); opacity: .9; }
+.pmenu .savewarn { align-self: flex-start; }
+/* phones: a compact play bar that also holds the canvas bar's controls (size, onion skin, grid, 3D view) */
+.pbslot { display: contents; }
+.mo.phone .pbar { gap: 0; padding: 0 3px; height: 36px; }
+.mo.phone .pbar .ib { width: 24px; height: 26px; }
+.mo.phone .pbar .ib svg.i { width: 14px; height: 14px; }
+.mo.phone .pbar .transport { gap: 0; }
+.mo.phone .pbar .play { width: 26px; height: 22px; margin: 0 1px; }
+.mo.phone .pbar .play svg { transform: scale(.85); }
+.mo.phone .pbar .tc { font-size: 11.5px; padding: 0 3px; min-width: 0; }
+.mo.phone .pbar .pbsep { display: none; }
+.mo.phone .pbar .chip { height: 20px; padding: 0 4px; font-size: 9.5px; margin: 0 2px 0 auto; }
+.mo.phone .pbar .chip + .chip { display: none; } /* the zoom readout: just information */
+/* History lives in the sidebar on phones; its list opens beside it */
+.rail .histpop { position: fixed; top: 8px; left: 50px; bottom: auto; }
+/* phones: a slimmer track toolbar and a thinner time ruler (seeker) */
+.mo.phone .tlbar .ib { width: 24px; height: 24px; }
+.mo.phone .tlbar .ib svg.i { width: 14px; height: 14px; }
+.mo.phone .tlbar .seg { padding: 2px; }
+.mo.phone .tlbar .seg.sm button { height: 19px; min-width: 22px; padding: 0 4px; }
+.mo.phone .tlbar .seg.sm button svg.i { width: 13px; height: 13px; }
+.mo.phone .tlbar .sep { height: 14px; margin: 0 2px; }
+.mo.phone .tlbar .chip { height: 19px; padding: 0 6px; font-size: 10px; }
+.mo.phone .ruler, .mo.phone .rulerpad, .mo.phone .marker { height: 22px; }
+.mo.phone .lrows, .mo.phone .snapline, .mo.phone .tlafter { top: 22px; }
+.mo.phone .tick { height: 4px; }
+.mo.phone .tlab { top: 3px; font-size: 9px; }
+.mo.phone .phtag { top: 2px; font-size: 9.5px; padding: 1px 5px; }
+.mo.phone .playhead::before { top: 16px; }
+.mo.phone .ruler .tend::before { height: 8px; width: 7px; }
+/* phones: thin track rows (same size on screen at any interface size; the timeline sets --rowh / --clippad) */
+.mo.phone .cvdock, .mo.phone .cvdock .lrow.canvas { height: var(--rowh); }
+.mo.phone .cvdock .lrow.canvas .clip.cvseg { top: var(--clippad) !important; height: calc(var(--rowh) - 2 * var(--clippad)) !important; }
+/* phones: the grid options open above the play bar (the bar would cut them off) */
+.mo.phone .gridpop { position: fixed; right: 8px; bottom: 46px; width: min(280px, calc(100vw - 16px)); }
+/* motion polish: buttons ease between states and give a little when pressed; views and panels fade in as they appear
+   (:where keeps these weaker than any button's own rules) */
+:where(.mo) button { transition: background-color .14s ease, color .14s ease, box-shadow .14s ease, opacity .14s ease, scale .12s ease; }
+:where(.mo :is(.ib, .btn, .chip, .play, .pmitem, .hcreate, .hghost, .seg button, .gseg2 button, .hratios button, .hopts button)):active { scale: .94; }
+.home { animation: mo-rise .26s cubic-bezier(.2, .8, .3, 1); }
+.ws, .assets { animation: mo-fade .2s ease-out; }
+@keyframes mo-rise { from { opacity: 0; translate: 0 8px; } to { opacity: 1; translate: 0 0; } }
+@keyframes mo-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .home, .ws, .assets { animation: none; }
+  :where(.mo) button { transition: none; }
+}
+.pmhint { margin: -4px 0 0; font: 400 11px/1.4 var(--sans); color: var(--ink-3); }

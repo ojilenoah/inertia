@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { anim } from "./anim";
 import type { Project } from "@moshion/engine";
 import { useStore } from "./store";
 import type { GridOpts } from "./store";
@@ -63,8 +65,8 @@ export function GridButton() {
     <div className="gridbtn" ref={ref}>
       <button className={"ib" + (grid ? " on" : "")} title="Grid (G)" onClick={() => setUI({ grid: !grid })}><Icon name="grid" /></button>
       <button className={"gchev" + (open ? " on" : "")} title="Grid options" onClick={() => setOpen(!open)}>▾</button>
-      {open && (
-        <div className="gridpop" onPointerDown={(e) => e.stopPropagation()}>
+      <AnimatePresence>{open && (
+        <motion.div {...anim.pop} className="gridpop" onPointerDown={(e) => e.stopPropagation()}>
           <div className="gprow"><span>Show</span>
             <button className={"gtog" + (grid ? " on" : "")} onClick={() => setUI({ grid: !grid })}>{grid ? "On" : "Off"}</button>
           </div>
@@ -77,8 +79,8 @@ export function GridButton() {
           <div className="gprow"><span>Snap to grid</span><button className={"gtog" + (o.snap ? " on" : "")} onClick={() => set({ snap: !o.snap })}>{o.snap ? "On" : "Off"}</button></div>
           <div className="gprow"><span>Thirds guide</span><button className={"gtog" + (o.thirds ? " on" : "")} onClick={() => set({ thirds: !o.thirds })}>{o.thirds ? "On" : "Off"}</button></div>
           <div className="gnote">Shown only while editing, never in the video. Alt while dragging skips snapping.</div>
-        </div>
-      )}
+        </motion.div>
+      )}</AnimatePresence>
     </div>
   );
 }
