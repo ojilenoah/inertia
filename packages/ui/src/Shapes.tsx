@@ -8,7 +8,7 @@ import { addChart, addParticles, importSVG } from "./newitems";
 import { useStore } from "./store";
 import { Icon } from "./Icon";
 import { addItem, inkFor } from "./Panels";
-import { snapAngle } from "./LineEdit";
+import { pendingPick, snapAngle } from "./LineEdit";
 
 /** A small picture of a shape. */
 export function ShapeIcon({ spec }: { spec: ShapeSpec }) {
@@ -70,6 +70,27 @@ export function ShapePicker() {
 }
 
 /** Line and Pen tools: drag on the canvas to draw; the result is a line item you can style and draw on over time. */
+/**
+ * The line tool, like a new motion path: a straight line appears in the middle of the canvas, selected, with its end
+ * node picked — drag its nodes, tap + to add more after one, tap a piece to bend it.
+ */
+export function addLine() {
+  const { project, t, edit, select } = useStore.getState();
+  const id = uid("item");
+  const start = Math.max(0, Math.min(t, project.duration)), end = start + 3;
+  edit((p) => {
+    const pl = placeItem(p, "video", start, end, p.items.find((q) => q.id === useStore.getState().selected)?.trackId, () => uid("V"));
+    let trackId: string | undefined = pl.trackId;
+    if (!trackId) { trackId = uid("V"); p.tracks.unshift({ id: trackId, name: `Track ${p.tracks.filter((x) => x.kind === "video").length + 1}`, kind: "video" }); }
+    const line: LineSpec = { pts: [[0, 0]], width: 10, color: inkFor(project, t), dash: "solid", arrow: "none", cap: "round" };
+    p.items.push({ id, name: "Line", kind: "line", trackId, lane: pl.lane, start, end, w: 2, h: 2, fill: "transparent", tint: "--green", keys: {}, line,
+      base: { x: Math.round(p.width / 2), y: Math.round(p.height / 2), z: 0, rx: 0, ry: 0, rz: 0, scale: 1, opacity: 1 } });
+  });
+  pendingPick.id = id; pendingPick.node = 0;
+  select(id); useStore.getState().setUI({ lineTool: null });
+  useStore.getState().toast("Line added · drag the node to place it · + adds the next nodes (drag to curve) · hold to stop");
+}
+
 export function LineDrawLayer({ k, stage }: { k: number; stage: React.RefObject<HTMLDivElement | null> }) {
   const tool = useStore((s) => s.ui.lineTool);
   const [live, setLive] = useState<[number, number][] | null>(null);

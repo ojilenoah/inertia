@@ -16,7 +16,7 @@ import type { PinchDetail } from "./touch";
 import { openPanelAt, pickedCount, pickedOn, useStore } from "./store";
 import { Icon } from "./Icon";
 import { placeAsset } from "./media";
-import { PlayerBar } from "./Panels";
+import { LoopButton, PlayerBar, Transport } from "./Panels";
 import { useAppliedUiScale, useStacked } from "./layout";
 import { Fader } from "./Fader";
 import { askConfirm } from "./Confirm";
@@ -171,6 +171,17 @@ export function Timeline() {
    * finger lifts; holding opens the ruler's menu (marker, loop); sliding right makes the ticks finer (zooms in),
    * sliding left makes them coarser.
    */
+  /** Fit: from the start to the end of whatever runs longest (a clip, a canvas or a canvas effect), edge to edge. */
+  function fitAll() {
+            // from the start to the end of whatever runs longest (a clip, a canvas or a canvas effect), edge to edge
+            const end = Math.max(0.5, ...project.items.map((i) => i.end), ...(project.backgrounds ?? []).map((b) => b.end), ...project.effects.map((f) => f.end));
+            userZoomed.current = true;
+            // measured now (never a remembered width)
+            const w = lanesRef.current?.clientWidth || W;
+            if (w !== W) setW(w);
+            setUI({ pps: Math.max(2, (w - PAD - 14) / end), viewStart: 0 });
+          }
+
   function startRuler(e: React.PointerEvent) {
     if (!(phone || e.pointerType === "touch")) return startScrub(e);
     e.stopPropagation();
@@ -502,8 +513,25 @@ export function Timeline() {
         </motion.div>
       )}</AnimatePresence>
       <div className="tlbar">
-        {/* phones: the track order button lives in this bar */}
-        {phone && <><SortButton /><div className="sep" /></>}
+        {/* phones: start / play / next sit in the exact middle; the tools to their left; loop, split, snapping,
+            the graph and the tick size to their right */}
+        {phone ? (<>
+        <div className="tlside left">
+          <div className="seg sm" role="group" aria-label="Timeline tool">
+            {tools.map(([id, ic, tip]) => (
+              <button key={id} className={ui.tool === id ? "on" : ""} title={tip} onClick={() => setUI({ tool: id })}><Icon name={ic} /></button>
+            ))}
+          </div>
+        </div>
+        <div className="tlplay"><Transport /></div>
+        <div className="tlside right">
+          <LoopButton />
+          <button className="ib" title="Split at playhead (S)" onClick={() => splitSelected()}><Icon name="scissors" /></button>
+          <button className={"ib" + (ui.snap ? " on" : "")} title="Snapping (N)" onClick={() => setUI({ snap: !ui.snap })}><Icon name="magnet" /></button>
+          <button className={"ib" + (ui.graph ? " on" : "")} title="Keyframe graph under the selected item (C)" onClick={() => setUI({ graph: !ui.graph })}><Icon name="curve" /></button>
+          <span className="zunit" title="Time between the ruler's small ticks">{tickLabel}</span>
+        </div>
+        </>) : (<>
         <div className="seg sm" role="group" aria-label="Timeline tool">
           {tools.map(([id, ic, tip]) => (
             <button key={id} className={ui.tool === id ? "on" : ""} title={tip} onClick={() => setUI({ tool: id })}><Icon name={ic} /></button>
@@ -512,31 +540,22 @@ export function Timeline() {
         <div className="sep" />
         <button className="ib" title="Split at playhead (S)" onClick={() => splitSelected()}><Icon name="scissors" /></button>
         <button className={"ib" + (ui.snap ? " on" : "")} title="Snapping (N)" onClick={() => setUI({ snap: !ui.snap })}><Icon name="magnet" /></button>
-        <button className="ib" title="Add keyframe to the selected item (K)" onClick={() => addKeyAtPlayhead()}><Icon name="diamond" /></button>
         <button className={"ib" + (ui.graph ? " on" : "")} title="Keyframe graph under the selected item (C)" onClick={() => setUI({ graph: !ui.graph })}><Icon name="curve" /></button>
-        {/* phones: no group / ungroup button here */}
-        {!phone && <><div className="sep" />{groupBtn()}</>}
+        <div className="sep" />{groupBtn()}
         <span className="sp" />
         <div className="zoomer">
           <button className="ib" title="Zoom out (−)" onClick={() => zoomTo(pps / 2.5)}><Icon name="zout" /></button>
           <ZoomFader value={pps2v(pps)} onChange={(v) => zoomTo(v2pps(v))} />
           <span className="zunit" title="Time between the ruler's small ticks">{tickLabel}</span>
           <button className="ib" title="Zoom in (+)" onClick={() => zoomTo(pps * 2.5)}><Icon name="zin" /></button>
-          <button className="chip" title="Fit everything in view: from the start to the end of the last clip or canvas" onClick={() => {
-            // from the start to the end of whatever runs longest (a clip, a canvas or a canvas effect), edge to edge
-            const end = Math.max(0.5, ...project.items.map((i) => i.end), ...(project.backgrounds ?? []).map((b) => b.end), ...project.effects.map((f) => f.end));
-            userZoomed.current = true;
-            // measured now (never a remembered width)
-            const w = lanesRef.current?.clientWidth || W;
-            if (w !== W) setW(w);
-            setUI({ pps: Math.max(2, (w - PAD - 14) / end), viewStart: 0 });
-          }}>Fit</button>
+          <button className="chip" title="Fit everything in view: from the start to the end of the last clip or canvas" onClick={fitAll}>Fit</button>
         </div>
+        </>)}
       </div>
 
       <div className={"tlbody" + (ui.hdrW < 56 ? " narrow" : "") + (ui.hdrW < 74 ? " noid" : "")} style={{ gridTemplateColumns: `${headW}px minmax(0,1fr)` }}>
         <div className="heads">
-          <div className="rulerpad">{!phone && <SortButton />}</div>
+          <div className="rulerpad">{phone ? <button className="chip fitpad" title="Fit everything in view: from the start to the end of the last clip or canvas" onClick={fitAll}>Fit</button> : <SortButton />}</div>
           <div className="hrows" ref={headsRef} onWheel={(e) => { rowsRef.current!.scrollTop += e.deltaY; }}>
             <AnimatePresence initial={false}>
             {rows.map((row, i) => row.kind === "graph"
@@ -791,13 +810,6 @@ export function Timeline() {
     if (!it || !(tt > it.start && tt < it.end)) { toast("Put the playhead over an item to split it"); return; }
     edit((d) => { const b = splitItem(d, it.id, tt); if (b) select(b.id); });
     toast(`Split ${it.name} at ${fmtClock(tt)}`);
-  }
-  function addKeyAtPlayhead() {
-    const it = project.items.find((i) => i.id === selected);
-    if (!it) { toast("Select an item first"); return; }
-    const ch = ui.graphProp;
-    edit((p) => { const d = p.items.find((i) => i.id === it.id)!; if (!addChannelKey(d, ch, t - d.start)) channelProps(d, ch).forEach((pp) => addKey(d, pp, t - d.start)); });
-    toast(`${chLabel(ch)} key at ${fmtClock(t)}`);
   }
 }
 

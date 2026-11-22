@@ -8,7 +8,7 @@ import { ChartView, ParticlesView } from "./newitems";
 import { BoardPlane, fitCam, useStills, type Cam } from "./Board";
 import { itemFxFilter, keyTimes, letterColors, numAt, pathPivot, pathTransform, resolveItem, setNum } from "@moshion/engine";
 import { subLine } from "@moshion/engine";
-import { arrowHeads, dashArray, fxOpt, hexA, roundCorners, setText } from "@moshion/engine";
+import { arrowHeads, dashArray, fxOpt, hexA, lineShape, setText } from "@moshion/engine";
 import type { SceneEffect } from "@moshion/engine";
 import type { MorphChar } from "@moshion/engine";
 import { groupOf, groupValues, itemState, itemsInGroup, ownValue, pieceFx, setValue, splitPieces, textAnimOf, textUnit } from "@moshion/engine";
@@ -460,7 +460,8 @@ function BoardClip({ children }: { children?: React.ReactNode }) {
 /** A drawn line: dashed or dotted, with arrowheads, drawn on as "draw" goes from 0 to 1. */
 function LineSvg({ item }: { item: Item }) {
   const l = item.line!;
-  const px = roundCorners(l.pts.map(([u, v]) => [(u + 0.5) * item.w, (v + 0.5) * item.h] as [number, number]), l.round ?? 0);
+  const toPx = ([u, v]: [number, number]) => [(u + 0.5) * item.w, (v + 0.5) * item.h] as [number, number];
+  const px = lineShape(l.pts.map(toPx), l.ctrl?.map((c) => (c ? [toPx(c[0]), toPx(c[1])] : null)), l.round ?? 0);
   const pts = subLine(px, item.look?.drawStart ?? 0, Math.max(0, Math.min(1, item.look?.draw ?? 1)));
   const dash = dashArray(l);
   return (
@@ -1267,7 +1268,7 @@ export function Viewer() {
               if (!it || !ms?.visible) return null;
               return <div key={id} className="selbox multi" style={{ left: ms.x - it.w / 2, top: ms.y - it.h / 2, width: it.w, height: it.h, transform: xf(ms), borderRadius: it.kind === "ellipse" || it.kind === "glass" ? "50%" : it.radius ?? 0 }} />;
             })}
-            {sel && sel.kind !== "motion" && selState?.visible && ui.cropping !== sel.id && (
+            {sel && sel.kind !== "motion" && !(sel.kind === "line" && (sel.line?.pts.length ?? 0) < 2) && selState?.visible && ui.cropping !== sel.id && (
               <div
                 className="selbox"
                 style={{

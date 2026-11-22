@@ -9,7 +9,7 @@ import { itemFxFilter, itemHidden, letterColors, resolveFx, resolveItem, resolve
 import { itemShapeD } from "./shapeMorph";
 import { hollowParts } from "./shapeMorph";
 import { depthStep, lookShadows, maskItems, maskOutline, pathGlyphs, repeatCopies, textLetters, textMaskOf, type Glyph } from "./extras";
-import { chartProgress, chartSVG, particlesAt, magicFrame, blurTrail, cameraAt, lookAt, textShown, mediaTime, volumeAt, stackAt, stackCompare, subLine, roundCorners, transLayers, transitionAt } from "@moshion/engine";
+import { chartProgress, chartSVG, particlesAt, magicFrame, blurTrail, cameraAt, lookAt, textShown, mediaTime, volumeAt, stackAt, stackCompare, subLine, lineShape, transLayers, transitionAt } from "@moshion/engine";
 
 /*
  * Draws one frame of a project onto a 2D canvas, the same way the editor shows it,
@@ -299,7 +299,8 @@ function drawTextOnPath(ctx: Ctx, it: Item, s: ItemState, g: { glyphs: Glyph[]; 
 /** A drawn line: dashed/dotted, arrowheads, and only the first `draw` share when it's being drawn on. */
 function drawLine(ctx: Ctx, it: Item) {
   const l = it.line!;
-  const px = roundCorners(l.pts.map(([u, v]) => [u * it.w, v * it.h] as [number, number]), l.round ?? 0);
+  const toPx = ([u, v]: [number, number]) => [u * it.w, v * it.h] as [number, number];
+  const px = lineShape(l.pts.map(toPx), l.ctrl?.map((c) => (c ? [toPx(c[0]), toPx(c[1])] : null)), l.round ?? 0);
   const pts = subLine(px, it.look?.drawStart ?? 0, Math.max(0, Math.min(1, it.look?.draw ?? 1)));
   if (pts.length < 2) return;
   ctx.lineWidth = l.width; ctx.strokeStyle = l.color; ctx.fillStyle = l.color;

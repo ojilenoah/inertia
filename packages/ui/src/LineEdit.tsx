@@ -5,12 +5,13 @@ import { itemLocked, itemState } from "@moshion/engine";
 import { useStore } from "./store";
 import { askConfirm } from "./Confirm";
 import { itemToWorld, toItemBox } from "./extras";
-import { Fader } from "./Fader";
-import { Icon } from "./Icon";
-import { useStacked } from "./layout";
-import { isTouch } from "./touch";
 
 type Pt = [number, number];
+type Ctrl = [Pt, Pt] | null;
+/** Freehand lines have many points: past this many, only their two ends get handles. */
+const MAX_HANDLES = 30;
+/** A line that was just added: its editor opens with this node picked (its + showing), like a new motion path. */
+export const pendingPick: { id: string; node: number } = { id: "", node: -1 };
 
 /**
  * Angle snapping for lines: the direction from `a` to `b` locks to 15° steps (0°, 15°, 30°, 45°, 90°…) when it's
@@ -24,41 +25,54 @@ export function snapAngle(a: Pt, b: Pt, ev?: { shiftKey?: boolean; altKey?: bool
   if (!ev?.shiftKey && Math.abs(ang - to) > (5 * Math.PI) / 180) return b;
   return [a[0] + Math.cos(to) * len, a[1] + Math.sin(to) * len];
 }
-/** Freehand lines have many points: past this many, only their two ends get handles. */
-const MAX_HANDLES = 30;
+
+/** A cubic piece split at u (de Casteljau): the two halves' control points and the point where they meet. */
+function splitCubic(a: Pt, c: [Pt, Pt], b: Pt, u: number): { mid: Pt; left: [Pt, Pt]; right: [Pt, Pt] } {
+  const L = (p: Pt, q: Pt): Pt => [p[0] + (q[0] - p[0]) * u, p[1] + (q[1] - p[1]) * u];
+  const ab = L(a, c[0]), bc = L(c[0], c[1]), cd = L(c[1], b), abc = L(ab, bc), bcd = L(bc, cd), mid = L(abc, bcd);
+  return { mid, left: [ab, abc], right: [bcd, cd] };
+}
+const cubicAt = (a: Pt, c: [Pt, Pt], b: Pt, u: number): Pt => {
+  const v = 1 - u;
+  return [v * v * v * a[0] + 3 * v * v * u * c[0][0] + 3 * v * u * u * c[1][0] + u * u * u * b[0], v * v * v * a[1] + 3 * v * v * u * c[0][1] + 3 * v * u * u * c[1][1] + u * u * u * b[1]];
+};
 
 /**
- * A selected line's points, editable on the canvas:
- *  - drag a point to move it
- *  - double-click (double-tap) the line to add a point there
- *  - right-click (long-press) a point to delete it (a line keeps at least two)
- *  - the + past either end: tap it, then tap where each next point goes (a chain from that end); Done to stop
- * Points snap to 15° angles from their neighbour (see snapAngle). A plain press on the line still moves the whole
- * line. After each change the line's box is fitted to its points.
+ * A selected line, edited the way a motion path is (but its nodes are only its shape, not keyframes):
+ *  - tap a node to pick it (drag it to move it; it snaps to 15° angles from its neighbour); a + appears beside it:
+ *    tap the +, then tap where each next node goes (hold, right-click, Escape or Done to stop)
+ *  - tap a piece of the line to get two bend handles that curve it
+ *  - right-click (long-press) a piece to add a node there; right-click (long-press) a node to delete it
+ *  - a plain drag on the line moves the whole line
+ * After each change the line's box is fitted around it.
  */
 export function LineEditor({ project, item, t, k }: { project: Project; item: Item; t: number; k: number }) {
-  // adding points from one end (and where the next one would go)
-  const [ext, setExt] = useState<"start" | "end" | null>(null);
+  const [sel, setSel] = useState<{ node?: number; seg?: number } | null>(null);
+  const [ext, setExt] = useState<number | null>(null); // adding nodes after this one
   const [hover, setHover] = useState<Pt | null>(null);
-  // phones: long-press the line for a small menu (add a node there, or set the corners' roundness)
-  const [pop, setPop] = useState<{ x: number; y: number; seg: number; at: Pt; mode: "menu" | "round" } | null>(null);
-  const phone = useStacked();
-  useEffect(() => { setExt(null); setHover(null); setPop(null); }, [item.id]);
   useEffect(() => {
-    if (!ext) return;
+    const pick = pendingPick.id === item.id ? pendingPick.node : -1;
+    // forgotten a moment later (not at once: this can run twice when the editor first appears)
+    if (pick >= 0) setTimeout(() => { if (pendingPick.id === item.id) pendingPick.id = ""; }, 400);
+    setSel(pick >= 0 ? { node: pick } : null); setExt(null); setHover(null);
+  }, [item.id]);
+  useEffect(() => {
+    if (ext == null) return;
     const key = (e: KeyboardEvent) => { if (e.key === "Escape" || e.key === "Enter") { e.stopPropagation(); setExt(null); setHover(null); } };
     addEventListener("keydown", key, true);
     return () => removeEventListener("keydown", key, true);
   }, [ext]);
   const l = item.line;
-  if (!l || l.pts.length < 2 || itemLocked(project, item)) return null;
+  if (!l || l.pts.length < 1 || itemLocked(project, item)) return null;
   const s = itemState(project, item, t);
   if (!s.visible) return null;
   const local = (p: Pt): Pt => [(p[0] + 0.5) * item.w, (p[1] + 0.5) * item.h];
-  const world = l.pts.map((p) => itemToWorld(s, item, local(p)));
+  const W = (p: Pt) => itemToWorld(s, item, local(p));
+  const world = l.pts.map((p) => W(p as Pt));
+  const ctrlW: (([Pt, Pt]) | null)[] = world.slice(0, -1).map((_, i) => { const c = l.ctrl?.[i]; return c ? [W(c[0] as Pt), W(c[1] as Pt)] : null; });
   const showAll = l.pts.length <= MAX_HANDLES;
   const { edit, checkpoint } = useStore.getState();
-  const r = 7 / k, sw = 1.6 / k;
+  const sw = 2 / k, col = "var(--sel)";
 
   /** a pointer position on the canvas (the layer is the canvas, scaled by k) */
   const canvasPt = (e: { clientX: number; clientY: number }, svg: Element): Pt => {
@@ -67,143 +81,191 @@ export function LineEditor({ project, item, t, k }: { project: Project; item: It
   };
   /** a canvas point as a point of the line (fractions of its box) */
   const toPt = (w: Pt): Pt => { const [x, y] = toItemBox(s, item, w); return [x / item.w - 0.5, y / item.h - 0.5]; };
-  const setPts = (fn: (pts: Pt[]) => void, commit = false) =>
-    edit((p) => { const it = p.items.find((q) => q.id === item.id); if (it?.line) fn(it.line.pts as Pt[]); }, commit);
+  const change = (fn: (pts: Pt[], ctrl: Ctrl[]) => void, commit = false) =>
+    edit((p) => {
+      const it = p.items.find((q) => q.id === item.id);
+      if (!it?.line) return;
+      const ctrl = (it.line.ctrl ??= it.line.pts.slice(0, -1).map(() => null)) as Ctrl[];
+      while (ctrl.length < it.line.pts.length - 1) ctrl.push(null);
+      fn(it.line.pts as Pt[], ctrl);
+      if (!ctrl.some(Boolean)) delete it.line.ctrl;
+    }, commit);
+  const svgOf = (e: React.SyntheticEvent) => (e.currentTarget as SVGGraphicsElement).ownerSVGElement!;
 
-  const dragPoint = (e: React.PointerEvent, i: number) => {
+  /** press on a node: drag to move it; a tap picks it (its + appears) */
+  const downNode = (e: React.PointerEvent, i: number) => {
     if (e.button !== 0) return;
     e.stopPropagation(); e.preventDefault();
-    const svg = (e.currentTarget as SVGGraphicsElement).ownerSVGElement!;
-    checkpoint();
-    const nb = world[i > 0 ? i - 1 : 1]; // the neighbour it snaps around
-    const mv = (ev: PointerEvent) => { const q = toPt(snapAngle(nb, canvasPt(ev, svg), ev)); setPts((pts) => { pts[i] = q; }); };
-    const up = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); fitBox(item.id); };
+    const svg = svgOf(e), x0 = e.clientX, y0 = e.clientY;
+    const nb: Pt | undefined = world[i > 0 ? i - 1 : 1]; // its neighbour, to snap angles around (none for a lone node)
+    let moved = false;
+    const mv = (ev: PointerEvent) => {
+      if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) return;
+      if (!moved) { moved = true; checkpoint(); }
+      const w = canvasPt(ev, svg), q = toPt(nb ? snapAngle(nb, w, ev) : w);
+      change((pts) => { pts[i] = q; });
+    };
+    const up = () => {
+      removeEventListener("pointermove", mv); removeEventListener("pointerup", up);
+      if (moved) fitBox(item.id); else { setSel({ node: i }); setExt(null); }
+    };
     addEventListener("pointermove", mv); addEventListener("pointerup", up);
   };
-  const deletePoint = (e: React.MouseEvent, i: number) => {
+  const deleteNode = (e: React.MouseEvent, i: number) => {
     e.preventDefault(); e.stopPropagation();
-    if (l.pts.length <= 2) { useStore.getState().toast("A line needs at least two points"); return; }
-    askConfirm(e, "Delete this point?", () => { checkpoint(); setPts((pts) => { pts.splice(i, 1); }); fitBox(item.id); });
+    if (l.pts.length <= 1) { useStore.getState().toast("A line keeps at least one node"); return; }
+    askConfirm(e, "Delete this node?", () => {
+      checkpoint();
+      change((pts, ctrl) => {
+        pts.splice(i, 1);
+        if (i === 0) ctrl.shift(); else if (i >= ctrl.length) ctrl.pop(); else ctrl.splice(i - 1, 2, null);
+      });
+      setSel(null); fitBox(item.id);
+    });
   };
-  /** double-click on a piece of the line: a new point there */
-  const addPoint = (e: React.MouseEvent, i: number) => {
-    e.stopPropagation();
-    const svg = (e.currentTarget as SVGGraphicsElement).ownerSVGElement!;
-    const [px, py] = canvasPt(e, svg), [ax, ay] = world[i], [bx, by] = world[i + 1];
-    const dx = bx - ax, dy = by - ay, u = Math.min(1, Math.max(0, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy || 1)));
-    const q = toPt([ax + dx * u, ay + dy * u]);
+  /** a node on piece `seg`, at the point of it nearest to canvas point `at` (a bent piece keeps its shape) */
+  const insertOn = (seg: number, at: Pt) => {
+    const a = world[seg], b = world[seg + 1], c = ctrlW[seg];
+    let u = 0.5;
+    if (c) { let best = Infinity; for (let n = 1; n < 40; n++) { const q = cubicAt(a, c, b, n / 40), d = Math.hypot(q[0] - at[0], q[1] - at[1]); if (d < best) { best = d; u = n / 40; } } }
+    else { const dx = b[0] - a[0], dy = b[1] - a[1]; u = Math.min(0.98, Math.max(0.02, ((at[0] - a[0]) * dx + (at[1] - a[1]) * dy) / (dx * dx + dy * dy || 1))); }
     checkpoint();
-    setPts((pts) => { pts.splice(i + 1, 0, q); });
-    useStore.getState().toast("Point added · drag it · right-click (long-press) deletes it");
+    if (c) {
+      const sp = splitCubic(a, c, b, u);
+      const mid = toPt(sp.mid), left = [toPt(sp.left[0]), toPt(sp.left[1])] as [Pt, Pt], right = [toPt(sp.right[0]), toPt(sp.right[1])] as [Pt, Pt];
+      change((pts, ctrl) => { pts.splice(seg + 1, 0, mid); ctrl.splice(seg, 1, left, right); });
+    } else {
+      const q = toPt([a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u]);
+      change((pts, ctrl) => { pts.splice(seg + 1, 0, q); ctrl.splice(seg, 0, null); });
+    }
+    setSel({ node: seg + 1 });
+    useStore.getState().toast("Node added · drag it · right-click (long-press) deletes it");
   };
-  /** a plain press on the line goes to the line itself underneath (so it still moves as a whole) */
-  const passDown = (e: React.PointerEvent) => {
+  /** press on a piece of the line: dragging moves the whole line (the line underneath takes it); a tap bends it */
+  const downSeg = (e: React.PointerEvent, seg: number) => {
+    if (e.button !== 0) return;
+    const x0 = e.clientX, y0 = e.clientY;
     const under = document.elementsFromPoint(e.clientX, e.clientY).find((el) => !el.closest(".lineedit"));
     if (under) { e.stopPropagation(); under.dispatchEvent(new PointerEvent("pointerdown", e.nativeEvent)); }
-  };
-
-  // where the + sits: a little past each end, in the line's direction
-  const plusAt = (end: "start" | "end"): Pt => {
-    const [a, b] = end === "end" ? [world[world.length - 2], world[world.length - 1]] : [world[1], world[0]];
-    const d = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, off = 24 / k;
-    return [b[0] + ((b[0] - a[0]) / d) * off, b[1] + ((b[1] - a[1]) / d) * off];
-  };
-  const from = ext === "end" ? world[world.length - 1] : ext === "start" ? world[0] : null;
-  // a quick tap adds the next point (when the finger lifts); holding still for a moment stops adding instead
-  const addFromEnd = (e: React.PointerEvent) => {
-    if (!ext || !from) return;
-    e.stopPropagation(); e.preventDefault();
-    if (e.button === 2) return;
-    const svg = (e.currentTarget as SVGGraphicsElement).ownerSVGElement!;
-    const x0 = e.clientX, y0 = e.clientY, mods = { shiftKey: e.shiftKey, altKey: e.altKey };
-    let done = false;
-    const off = () => { clearTimeout(hold); removeEventListener("pointerup", up); };
-    const hold = window.setTimeout(() => { done = true; off(); navigator.vibrate?.(12); stop(); }, 450);
     const up = (ev: PointerEvent) => {
-      off();
-      if (done || Math.hypot(ev.clientX - x0, ev.clientY - y0) > 12) return;
-      const q = toPt(snapAngle(from, canvasPt(ev, svg), { shiftKey: mods.shiftKey || ev.shiftKey, altKey: mods.altKey || ev.altKey }));
-      checkpoint();
-      setPts((pts) => { if (ext === "end") pts.push(q); else pts.unshift(q); });
-      fitBox(item.id);
+      removeEventListener("pointerup", up);
+      if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) { setSel({ seg }); setExt(null); }
     };
     addEventListener("pointerup", up);
   };
+  /** drag one of a piece's bend handles (a straight piece gets its handles on first drag) */
+  const downHandle = (e: React.PointerEvent, seg: number, end: 0 | 1) => {
+    if (e.button !== 0) return;
+    e.stopPropagation(); e.preventDefault();
+    const svg = svgOf(e);
+    checkpoint();
+    const a = world[seg], b = world[seg + 1];
+    const start: [Pt, Pt] = ctrlW[seg] ?? [[a[0] + (b[0] - a[0]) / 3, a[1] + (b[1] - a[1]) / 3], [a[0] + ((b[0] - a[0]) * 2) / 3, a[1] + ((b[1] - a[1]) * 2) / 3]];
+    const base: [Pt, Pt] = [toPt(start[0]), toPt(start[1])];
+    const mv = (ev: PointerEvent) => {
+      const q = toPt(canvasPt(ev, svg));
+      change((_pts, ctrl) => { const c = (ctrl[seg] ?? [base[0], base[1]]) as [Pt, Pt]; c[end] = q; ctrl[seg] = [c[0], c[1]]; });
+    };
+    const up = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); fitBox(item.id); };
+    addEventListener("pointermove", mv); addEventListener("pointerup", up);
+  };
+
+  // adding nodes after a picked one: a quick tap adds the next (when the finger lifts); holding stops
+  const from = ext != null ? world[ext] : null;
   const stop = () => { setExt(null); setHover(null); };
+  const addAt = (e: React.PointerEvent) => {
+    if (ext == null || !from) return;
+    e.stopPropagation(); e.preventDefault();
+    if (e.button === 2) return;
+    const svg = svgOf(e), x0 = e.clientX, y0 = e.clientY, mods = { shiftKey: e.shiftKey, altKey: e.altKey };
+    const at = snapAngle(from, canvasPt(e, svg), mods); // where the node goes
+    let done = false, dragged = false;
+    const off = () => { clearTimeout(hold); removeEventListener("pointerup", up); removeEventListener("pointermove", mv); };
+    const hold = window.setTimeout(() => { done = true; off(); navigator.vibrate?.(12); stop(); }, 450);
+    const mv = (ev: PointerEvent) => {
+      if (!dragged && Math.hypot(ev.clientX - x0, ev.clientY - y0) > 10) { dragged = true; clearTimeout(hold); } // dragging: it curves, not a hold
+      if (dragged) setHover(canvasPt(ev, svg));
+    };
+    const up = (ev: PointerEvent) => {
+      off();
+      if (done) return;
+      const q = toPt(at);
+      // dragged out: the piece arriving at this node curves, pulled by the drag (like the path's pen)
+      const pull = dragged ? canvasPt(ev, svg) : null;
+      const c: Ctrl = pull ? [toPt([from[0] + (at[0] - from[0]) / 3, from[1] + (at[1] - from[1]) / 3]), toPt([2 * at[0] - pull[0], 2 * at[1] - pull[1]])] : null;
+      checkpoint();
+      change((pts, ctrl) => { pts.splice(ext + 1, 0, q); ctrl.splice(ext, ext < ctrl.length ? 1 : 0, c, ...(ext < ctrl.length ? [null] : [])); });
+      fitBox(item.id);
+      setHover(null); setExt(ext + 1); setSel({ node: ext + 1 });
+    };
+    addEventListener("pointerup", up); addEventListener("pointermove", mv);
+  };
   const top = document.querySelector<HTMLElement>(".mo");
+  const pickedNode = sel?.node != null && sel.node < world.length ? sel.node : null;
+  const pickedSeg = sel?.seg != null && sel.seg < world.length - 1 ? sel.seg : null;
 
   return (
     <svg className="lineedit" width={project.width} height={project.height} style={{ overflow: "visible" }}>
-      {ext && from && (
-        <>
-          {/* adding points: the whole canvas takes taps; the next piece shows where it would go */}
-          <rect className="lext" x={-20000} y={-20000} width={40000} height={40000}
-            onPointerDown={addFromEnd}
-            onPointerMove={(e) => { const svg = (e.currentTarget as SVGGraphicsElement).ownerSVGElement!; setHover(snapAngle(from, canvasPt(e, svg), e.nativeEvent)); }}
-            onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); stop(); }} />
-          {hover && <line className="lprev" x1={from[0]} y1={from[1]} x2={hover[0]} y2={hover[1]} strokeWidth={Math.max(2 / k, l.width * s.scale)} />}
-          {top && createPortal(
-            <div className="linehint"><b>Adding points</b><span>tap where each goes · hold to stop</span><button onClick={stop}>Done</button></div>, top)}
-        </>
-      )}
-      {world.slice(0, -1).map((a, i) => (
-        <line key={"s" + i} className="lseg" x1={a[0]} y1={a[1]} x2={world[i + 1][0]} y2={world[i + 1][1]} strokeWidth={Math.max(14 / k, l.width * s.scale)}
-          onPointerDown={passDown} onDoubleClick={(e) => addPoint(e, i)}
-          onContextMenu={(e) => {
-            if (!phone && !isTouch()) return; // desktop: right-click keeps the item's menu
-            e.preventDefault(); e.stopPropagation();
-            const svg = (e.currentTarget as SVGGraphicsElement).ownerSVGElement!;
-            setPop({ x: e.clientX, y: e.clientY, seg: i, at: canvasPt(e, svg), mode: "menu" });
-          }} />
-      ))}
-      {pop && top && createPortal(
-        <>
-          <div className="lpopback" onPointerDown={() => setPop(null)} />
-          <div className="linepop" style={{ left: Math.min(Math.max(pop.x, 120), innerWidth - 120), top: Math.max(8, pop.y - 64) }}>
-            {pop.mode === "menu" ? (
-              <>
-                <button onClick={() => {
-                  // a node right where the finger was
-                  const [ax, ay] = world[pop.seg], [bx, by] = world[pop.seg + 1], [px, py] = pop.at;
-                  const dx = bx - ax, dy = by - ay, u = Math.min(1, Math.max(0, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy || 1)));
-                  const q = toPt([ax + dx * u, ay + dy * u]);
-                  checkpoint(); setPts((pts) => { pts.splice(pop.seg + 1, 0, q); }); setPop(null);
-                  useStore.getState().toast("Node added · drag it · long-press it to delete");
-                }}><Icon name="plus" size={15} />Node</button>
-                <button onClick={() => { checkpoint(); setPop({ ...pop, mode: "round" }); }}><Icon name="curve" size={15} />Roundness</button>
-              </>
-            ) : (
-              <>
-                <span className="lpround"><Fader value={l.round ?? 0} min={0} max={300} step={1} label="Roundness"
-                  onChange={(v) => edit((p) => { const it = p.items.find((q) => q.id === item.id); if (it?.line) it.line.round = v || undefined; }, false)} /></span>
-                <b className="lpval">{l.round ? Math.round(l.round) : 0}</b>
-                <button className="lpok" title="Done" aria-label="Done" onClick={() => setPop(null)}><Icon name="check" size={16} /></button>
-              </>
-            )}
-          </div>
-        </>, top)}
-      {/* + past each end: keep drawing from there */}
-      {(["start", "end"] as const).map((end) => {
-        const [px, py] = plusAt(end), on = ext === end;
+      {/* the pieces: tap to bend, drag to move the line, right-click (long-press) to add a node */}
+      {world.slice(0, -1).map((a, i) => {
+        const b = world[i + 1], c = ctrlW[i];
+        const d = c ? `M${a[0]} ${a[1]}C${c[0][0]} ${c[0][1]} ${c[1][0]} ${c[1][1]} ${b[0]} ${b[1]}` : `M${a[0]} ${a[1]}L${b[0]} ${b[1]}`;
         return (
-          <g key={end} className={"lplus" + (on ? " on" : "")} onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); setHover(null); setExt(on ? null : end); }}>
-            <title>{on ? "Stop adding points" : `Add points from the ${end === "end" ? "end" : "start"}: tap here, then tap where each goes`}</title>
-            <circle cx={px} cy={py} r={9 / k} />
-            <path d={`M${px - 4.5 / k} ${py}H${px + 4.5 / k}M${px} ${py - 4.5 / k}V${py + 4.5 / k}`} strokeWidth={1.8 / k} />
-          </g>
+          <path key={"s" + i} className={"lseg" + (pickedSeg === i ? " on" : "")} d={d} strokeWidth={Math.max(14 / k, l.width * s.scale)}
+            onPointerDown={(e) => downSeg(e, i)} onDoubleClick={(e) => { e.stopPropagation(); insertOn(i, canvasPt(e, svgOf(e))); }}
+            onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); insertOn(i, canvasPt(e, svgOf(e))); }}>
+            <title>Tap to bend · drag to move the line · right-click (long-press) to add a node here</title>
+          </path>
         );
       })}
+      {/* bend handles on the picked piece */}
+      {pickedSeg != null && (() => {
+        const a = world[pickedSeg], b = world[pickedSeg + 1];
+        const c = ctrlW[pickedSeg] ?? [[a[0] + (b[0] - a[0]) / 3, a[1] + (b[1] - a[1]) / 3], [a[0] + ((b[0] - a[0]) * 2) / 3, a[1] + ((b[1] - a[1]) * 2) / 3]];
+        return ([0, 1] as const).map((end) => {
+          const p = c[end], base = end ? b : a;
+          return (
+            <g key={"h" + end}>
+              <line x1={base[0]} y1={base[1]} x2={p[0]} y2={p[1]} stroke="var(--accent)" strokeWidth={sw * 0.6} style={{ pointerEvents: "none" }} />
+              <rect className="lhandle" x={p[0] - 4.5 / k} y={p[1] - 4.5 / k} width={9 / k} height={9 / k} rx={2 / k} fill="#fff" stroke="var(--accent)" strokeWidth={sw * 0.8}
+                onPointerDown={(e) => downHandle(e, pickedSeg, end)}><title>Drag to bend this piece</title></rect>
+            </g>
+          );
+        });
+      })()}
+      {/* adding nodes: the whole canvas takes taps; the next piece shows where it would go */}
+      {ext != null && from && (
+        <>
+          <rect className="lext" x={-20000} y={-20000} width={40000} height={40000} onPointerDown={addAt}
+            onPointerMove={(e) => setHover(snapAngle(from, canvasPt(e, svgOf(e)), e.nativeEvent))}
+            onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); stop(); }} />
+          {hover && <line className="lprev" x1={from[0]} y1={from[1]} x2={hover[0]} y2={hover[1]} strokeWidth={Math.max(2 / k, l.width * s.scale)} />}
+          {top && createPortal(<div className="linehint"><b>Adding nodes</b><span>tap where each goes · hold to stop</span><button onClick={stop}>Done</button></div>, top)}
+        </>
+      )}
+      {/* the nodes */}
       {world.map((p, i) => (showAll || i === 0 || i === world.length - 1) && (
-        <circle key={"p" + i} className="lpt" cx={p[0]} cy={p[1]} r={r} strokeWidth={sw}
-          onPointerDown={(e) => dragPoint(e, i)} onContextMenu={(e) => deletePoint(e, i)}>
-          <title>{i === 0 ? "Start" : i === world.length - 1 ? "End" : `Point ${i + 1}`} · drag to move · right-click (long-press) to delete · double-click the line to add a point</title>
+        <circle key={"p" + i} className="lnode" cx={p[0]} cy={p[1]} r={(pickedNode === i ? 7.5 : 6) / k} fill={pickedNode === i ? "var(--accent)" : "#fff"} stroke={col} strokeWidth={sw}
+          onPointerDown={(e) => downNode(e, i)} onContextMenu={(e) => deleteNode(e, i)}>
+          <title>Drag to move · tap to pick it (then + adds nodes after it) · right-click (long-press) to delete</title>
         </circle>
       ))}
+      {/* the picked node's +: add nodes after it */}
+      {pickedNode != null && (() => {
+        const [x, y] = world[pickedNode], px = x + 30 / k, on = ext === pickedNode;
+        return (
+          <g className={"lplus" + (on ? " on" : "")} onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); setHover(null); setExt(on ? null : pickedNode); }}>
+            <title>{on ? "Stop adding nodes" : "Add nodes after this one: tap here, then tap where each goes"}</title>
+            <circle cx={px} cy={y} r={9 / k} />
+            <path d={`M${px - 4.5 / k} ${y}H${px + 4.5 / k}M${px} ${y - 4.5 / k}V${y + 4.5 / k}`} strokeWidth={sw} />
+          </g>
+        );
+      })()}
     </svg>
   );
 }
 
-/** Fit a line's box to its points again (the line stays exactly where it is on the canvas). */
+/** Fit a line's box around it again (nodes and bend handles); the line stays exactly where it is on the canvas. */
 export function fitBox(id: string) {
   // its size and turn right now (they may be animated)
   const S = useStore.getState(), orig = S.project.items.find((q) => q.id === id);
@@ -212,16 +274,20 @@ export function fitBox(id: string) {
   S.edit((p) => {
     const it = p.items.find((q) => q.id === id);
     const l = it?.line;
-    if (!it || !l || l.pts.length < 2) return;
-    const px = l.pts.map(([u, v]) => [(u + 0.5) * it.w, (v + 0.5) * it.h] as Pt);
-    const minX = Math.min(...px.map((q) => q[0])), maxX = Math.max(...px.map((q) => q[0]));
-    const minY = Math.min(...px.map((q) => q[1])), maxY = Math.max(...px.map((q) => q[1]));
+    if (!it || !l || l.pts.length < 1) return;
+    const toPx = ([u, v]: [number, number]) => [(u + 0.5) * it.w, (v + 0.5) * it.h] as Pt;
+    const px = l.pts.map(toPx), cpx = (l.ctrl ?? []).map((c) => (c ? ([toPx(c[0]), toPx(c[1])] as [Pt, Pt]) : null));
+    const all = [...px, ...cpx.flatMap((c) => c ?? [])];
+    const minX = Math.min(...all.map((q) => q[0])), maxX = Math.max(...all.map((q) => q[0]));
+    const minY = Math.min(...all.map((q) => q[1])), maxY = Math.max(...all.map((q) => q[1]));
     const nw = Math.max(2, maxX - minX), nh = Math.max(2, maxY - minY);
     // how far the box's middle moves, in the item's own (turned, scaled) frame → on the canvas
     const cx = (minX + maxX) / 2 - it.w / 2, cy = (minY + maxY) / 2 - it.h / 2;
     const sc = now.scale || 1, a = (now.rz * Math.PI) / 180;
     const dx = (cx * Math.cos(a) - cy * Math.sin(a)) * sc, dy = (cx * Math.sin(a) + cy * Math.cos(a)) * sc;
-    l.pts = px.map(([x, y]) => [(x - (minX + maxX) / 2 + nw / 2) / nw - 0.5, (y - (minY + maxY) / 2 + nh / 2) / nh - 0.5] as Pt);
+    const back = ([x, y]: Pt): Pt => [(x - (minX + maxX) / 2 + nw / 2) / nw - 0.5, (y - (minY + maxY) / 2 + nh / 2) / nh - 0.5];
+    l.pts = px.map(back);
+    if (l.ctrl) l.ctrl = cpx.map((c) => (c ? [back(c[0]), back(c[1])] : null));
     it.w = nw; it.h = nh;
     it.base.x += dx; it.base.y += dy;
     for (const ky of it.keys.x ?? []) ky.v += dx;

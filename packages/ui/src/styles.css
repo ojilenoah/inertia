@@ -1360,7 +1360,7 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 /* phones: no zoom slider or −/+ (slide the ruler to zoom); the tick size and Fit stay */
 .mo.phone .zoomer > :is(.ib, .zf) { display: none; }
 /* phones: the track toolbar centred */
-.mo.phone .tlbar { justify-content: center; }
+.mo.phone .tlbar { justify-content: safe center; }
 .mo.phone .tlbar > .sp { display: none; }
 /* phones: the right sidebar: menu + History on top, play controls in the middle, held keys at the bottom */
 .mo.phone .ws > .pbar { display: grid; grid-template-rows: 1fr auto 1fr; justify-items: center; }
@@ -1426,3 +1426,33 @@ body .fbar.under .ib { width: 28px; height: 26px; }
 .linepop .lpround { width: 150px; padding: 0 6px; }
 .linepop .lpval { min-width: 28px; text-align: right; font: 500 11px var(--mono); color: var(--ink-3); }
 .linepop .lpok { width: 34px; padding: 0; justify-content: center; background: var(--ink); color: var(--panel) !important; }
+/* line editing, like a motion path: nodes, bend handles, the picked piece */
+.lineedit .lnode, .lineedit .lhandle { pointer-events: auto; cursor: move; }
+.lineedit .lseg { stroke: transparent; fill: none; pointer-events: stroke; cursor: pointer; }
+.lineedit .lseg.on { stroke: color-mix(in srgb, var(--accent) 30%, transparent); }
+.lineedit .lplus circle { fill: var(--sel); stroke: none; }
+/* phones: play controls in the track toolbar (no timecode there: the playhead shows the time); Fit above the track names */
+.mo.phone .tlbar .transport { gap: 1px; margin: 0; }
+.mo.phone .tlbar .transport .tc, .mo.phone .tlbar .transport .tcm { display: none; }
+.mo.phone .tlbar .play { width: 30px; height: 26px; }
+.rulerpad .fitpad { height: 20px; padding: 0 6px; font-size: 10.5px; margin: 0 auto; }
+.mo.phone .rulerpad { padding: 0; justify-content: center; }
+.mo.phone .tlbar { gap: 0; padding: 0 3px; }
+.mo.phone .tlbar .sep { margin: 0 2px; }
+.mo.phone .tlbar .zunit { min-width: 0; margin: 0 3px; }
+.pathlayer.linelayer { z-index: 46; } /* a line's nodes above its selection box corners */
+/* phones: the track toolbar never cuts its first buttons off: centred when it fits, from the left when it doesn't */
+.mo.phone .tlbar, .ws.s-top .tlbar { justify-content: safe center; }
+.mo.phone .tlbar { padding: 0 2px; } .mo.phone .tlbar .sep { margin: 0 1px; } .mo.phone .tlbar .zunit { margin: 0 2px; }
+/* phones: the track toolbar in three parts, with start / play / next exactly in the middle */
+.mo.phone .tlbar { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 4px; }
+.mo.phone .tlbar .tlside { display: flex; align-items: center; gap: 0; min-width: 0; }
+.mo.phone .tlbar .tlside.left { justify-content: flex-end; }
+.mo.phone .tlbar .tlside.right { justify-content: flex-start; }
+.mo.phone .tlbar .tlplay { display: flex; align-items: center; }
+.mo.phone .tlbar { gap: 2px; } .mo.phone .tlbar .seg { gap: 0; padding: 2px; } .mo.phone .tlbar .seg.sm button { min-width: 26px; padding: 0 3px; }
+.mo.phone .tlbar .tlside .ib { width: 26px; }
+.mo.phone .tlbar .tlside .ib { width: 25px; } .mo.phone .tlbar .tlside .zunit { margin: 0 0 0 2px; }
+/* phones: the whole track toolbar sits centred as one row (the play buttons aren't pinned to the middle) */
+.mo.phone .tlbar { display: flex; justify-content: safe center; gap: 4px; }
+.mo.phone .tlbar .tlside.left, .mo.phone .tlbar .tlside.right { justify-content: flex-start; flex: none; }

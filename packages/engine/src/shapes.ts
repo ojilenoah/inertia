@@ -151,6 +151,42 @@ export interface LineSpec {
   cap: "round" | "butt";
   /** rounded corners where the line bends (px, in the line's own box; 0 = sharp) */
   round?: number;
+  /** a bend for each piece between two points: its two control points (same units as pts), or null for straight */
+  ctrl?: ([[number, number], [number, number]] | null)[];
+}
+/**
+ * The points to draw a line through: straight pieces, bent pieces (cubic curves through their control points), and
+ * rounded corners of radius `r` where two straight pieces meet.
+ */
+export function lineShape(pts: [number, number][], ctrl: ([[number, number], [number, number]] | null)[] | undefined, r = 0, steps = 16): [number, number][] {
+  const n = pts.length;
+  if (n < 2) return pts;
+  const curved = (s: number) => !!ctrl?.[s];
+  const corner = (i: number): [number, number][] | null => {
+    if (!(r > 0) || i <= 0 || i >= n - 1 || curved(i - 1) || curved(i)) return null;
+    const [ax, ay] = pts[i - 1], [px, py] = pts[i], [bx, by] = pts[i + 1];
+    const d1 = Math.hypot(ax - px, ay - py), d2 = Math.hypot(bx - px, by - py), rr = Math.min(r, d1 / 2, d2 / 2);
+    if (rr < 0.5) return null;
+    const p1: [number, number] = [px + ((ax - px) / d1) * rr, py + ((ay - py) / d1) * rr];
+    const p2: [number, number] = [px + ((bx - px) / d2) * rr, py + ((by - py) / d2) * rr];
+    const out: [number, number][] = [];
+    for (let k = 0; k <= 10; k++) { const u = k / 10, v = 1 - u; out.push([v * v * p1[0] + 2 * v * u * px + u * u * p2[0], v * v * p1[1] + 2 * v * u * py + u * u * p2[1]]); }
+    return out;
+  };
+  const out: [number, number][] = [pts[0]];
+  for (let s = 0; s < n - 1; s++) {
+    const a = pts[s], b = pts[s + 1], c = ctrl?.[s];
+    if (c) {
+      for (let k = 1; k <= steps; k++) {
+        const u = k / steps, v = 1 - u;
+        out.push([v * v * v * a[0] + 3 * v * v * u * c[0][0] + 3 * v * u * u * c[1][0] + u * u * u * b[0], v * v * v * a[1] + 3 * v * v * u * c[0][1] + 3 * v * u * u * c[1][1] + u * u * u * b[1]]);
+      }
+    } else {
+      const cr = corner(s + 1);
+      if (cr) out.push(...cr); else out.push(b);
+    }
+  }
+  return out;
 }
 /**
  * A line with its corners rounded: each bend becomes a smooth curve of radius about `r` (never more than half of

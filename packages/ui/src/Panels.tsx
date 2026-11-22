@@ -6,7 +6,7 @@ import { putProject } from "./library";
 import { importFiles, pickMedia, placeAsset } from "./media";
 import { addCamera, addMotion } from "./MotionPath";
 import { HistoryButton, RedoButton, UndoButton } from "./History";
-import { ShapePicker } from "./Shapes";
+import { ShapePicker, addLine } from "./Shapes";
 import { Icon, PlayIcon } from "./Icon";
 import { canScaleUi, useStacked } from "./layout";
 import { toggleMod, useMods, useTouch } from "./touch";
@@ -133,18 +133,14 @@ export function PlayerBar() {
   const { setUI } = useStore.getState();
   const sideTip = `Put the video on the ${ui.side === "left" ? "right" : "left"}`;
   const sideTurn = ui.side === "right" ? "scaleX(-1)" : undefined;
-  const loopBtn = (
-      <button className={"ib" + (ui.loop?.on ? " on" : "")} title={ui.loop ? `Loop ${ui.loop.a.toFixed(2)}–${ui.loop.b.toFixed(2)}s (L) · I / O set its ends` : "Loop: plays the selected item (or a range set with I and O) over and over (L)"}
-        onClick={() => { const s = useStore.getState(); const lp = s.ui.loop; if (lp) s.setUI({ loop: { ...lp, on: !lp.on } }); else { const it = s.project.items.find((i) => i.id === s.selected); s.setUI({ loop: { a: it?.start ?? 0, b: it?.end ?? s.project.duration, on: true } }); } }}>
-        <Icon name="cycle" />
-      </button>
-  );
-  // phones: a sidebar beside the video: menu and History on top, the play controls in the exact middle, held keys at the bottom
+  const loopBtn = <LoopButton />;
+  // phones: a sidebar beside the video: menu and History on top; held keys, then undo / redo at the bottom
   if (stacked) return (
     <div className="pbar">
       <div className="pbgroup pbtop"><PhoneMenu /><HistoryButton /></div>
-      <div className="pbgroup pbmid"><Transport />{loopBtn}<UndoButton /><RedoButton /></div>
-      <div className="pbgroup pbbot">{touch && <TouchMods />}</div>
+      <span />
+      {/* the play controls are in the track toolbar on phones */}
+      <div className="pbgroup pbbot">{touch && <TouchMods />}<UndoButton /><RedoButton /></div>
     </div>
   );
   return (
@@ -162,6 +158,17 @@ export function PlayerBar() {
       <span className="pbar-ratio" title="Layout follows the video shape">{vertical ? "Tall" : "Wide"}</span>
       <button className="ib" title="Toggle theme" onClick={() => setUI({ theme: ui.theme === "dark" ? "light" : "dark" })}><Icon name={ui.theme === "dark" ? "moon" : "sun"} /></button>
     </div>
+  );
+}
+
+/** Loop: the selected item (or the range set with I / O) plays over and over (L). */
+export function LoopButton() {
+  const ui = useStore((s) => s.ui);
+  return (
+    <button className={"ib" + (ui.loop?.on ? " on" : "")} title={ui.loop ? `Loop ${ui.loop.a.toFixed(2)}–${ui.loop.b.toFixed(2)}s (L) · I / O set its ends` : "Loop: plays the selected item (or a range set with I and O) over and over (L)"}
+        onClick={() => { const s = useStore.getState(); const lp = s.ui.loop; if (lp) s.setUI({ loop: { ...lp, on: !lp.on } }); else { const it = s.project.items.find((i) => i.id === s.selected); s.setUI({ loop: { a: it?.start ?? 0, b: it?.end ?? s.project.duration, on: true } }); } }}>
+        <Icon name="cycle" />
+      </button>
   );
 }
 
@@ -245,7 +252,7 @@ export function Rail() {
       <button className="ib on" title="Select (V)" aria-label="Select"><Icon name="cursor" /></button>
       <hr />
       <ShapePicker />
-      <button className={"ib" + (lineTool === "line" ? " on" : "")} title="Line: drag on the canvas (Shift keeps it straight at 15° steps)" aria-label="Draw a line" onClick={() => useStore.getState().setUI({ lineTool: lineTool === "line" ? null : "line" })}><Icon name="line" /></button>
+      <button className="ib" title="Line: adds a line to the canvas · drag its nodes, + adds more, tap a piece to bend it" aria-label="Add a line" onClick={() => addLine()}><Icon name="line" /></button>
       <button className={"ib" + (lineTool === "pen" ? " on" : "")} title="Pen: draw a freehand line" aria-label="Draw freehand" onClick={() => useStore.getState().setUI({ lineTool: lineTool === "pen" ? null : "pen" })}><Icon name="pen" /></button>
       {tools.map(([k, ic, label]) => (
         <button key={k} className="ib" title={`Add ${label}`} aria-label={`Add ${label}`} onClick={() => addItem(SHAPES[k])}><Icon name={ic} /></button>
