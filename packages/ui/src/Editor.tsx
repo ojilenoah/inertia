@@ -16,7 +16,7 @@ import { ExportDialog } from "./Export";
 import { openNewerCopy, putProject, restorePictures, startLibrarySync, syncWithDisk } from "./library";
 import { diskInit } from "./disk";
 import { Timeline, addChannelKey, channelProps, chLabel } from "./Timeline";
-import { Header, Rail } from "./Panels";
+import { Header, PlayerBar, Rail } from "./Panels";
 import { applyUiScale, isStacked, useWindowSize } from "./layout";
 import { EditPanel, TrackBar } from "./EditPanel";
 import { Tooltips } from "./Tooltips";
@@ -28,7 +28,7 @@ function useLayoutVars(vertical: boolean, aspect: number, media: boolean, f = 1,
   const size = useWindowSize();
   // upright phone: the video takes the full width, up to a bit under half the height
   // (no top bar there, and the tools sit beside the video)
-  const auto = Math.min((size.h - 6) * 0.6, (size.w - 6 - 45) / aspect);
+  const auto = Math.min((size.h - 6) * 0.6, (size.w - 6 - 45 - 39) / aspect); // tools on the left, play controls on the right
   const sh = Math.round(Math.max(120, Math.min(size.h - 160, split != null ? (size.h - 6) * split : auto)));
   const vw = Math.round(Math.min(size.w * 0.75, Math.max(200, Math.min(size.w * 0.4, ((size.h - 6 - 34) * 9) / 16) * f)));
   const rows = size.h - 6;
@@ -211,6 +211,17 @@ export function Editor() {
           <Rail />
           {media && <Assets />}
           <Timeline />
+          {stacked && <PlayerBar />}
+          {/* phones: the handle on the gap between the video and the tracks: drag for more of either (double-tap: automatic) */}
+          {stacked && <div className="tsplit" title="Drag to resize the video and the tracks · double-tap for the automatic size"
+            onDoubleClick={() => useStore.getState().setUI({ phoneVid: null })}
+            onPointerDown={(e) => {
+              e.preventDefault(); e.stopPropagation();
+              const ws = (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect();
+              const mv = (ev: PointerEvent) => useStore.getState().setUI({ phoneVid: Math.round(Math.min(0.85, Math.max(0.15, (ev.clientY - ws.top) / ws.height)) * 1000) / 1000 });
+              const up = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); };
+              addEventListener("pointermove", mv); addEventListener("pointerup", up);
+            }}><i /></div>}
         </div>
       ) : (
         <>

@@ -26,7 +26,7 @@ const v2pps = (v: number) => 2 * 10 ** ((v / ZSTEPS) * ZMAX);
 const pps2v = (p: number) => (Math.log10(p / 2) / ZMAX) * ZSTEPS;
 const GRAPH_H = 160;
 /** Space at the top of the graph row for its own controls, kept clear of the curves. */
-const GRAPH_TOP = 34;
+const GRAPH_TOP = 12;
 
 type Row =
   | { kind: "track"; track: Track; h: number }
@@ -39,8 +39,8 @@ let ROW_H = 32, CLIP_PAD = 4;
 /** Phones: thin rows that keep the same size on screen whatever the interface size. */
 function setRowSize(phone: boolean, uiScale: number) {
   const k = Math.min(1, Math.max(0.5, uiScale || 1));
-  ROW_H = phone ? Math.round(24 / k) : 32;
-  CLIP_PAD = phone ? Math.round(3 / k) : 4;
+  ROW_H = phone ? Math.round(30 / k) : 32;
+  CLIP_PAD = phone ? Math.round(4 / k) : 4;
 }
 
 /** Normal and group tracks, then audio tracks, then the canvas track at the very bottom. */
@@ -425,16 +425,6 @@ export function Timeline() {
 
   return (
     <section className="card timeline" aria-label="Timeline" style={{ ["--rowh" as string]: `${ROW_H}px`, ["--clippad" as string]: `${CLIP_PAD}px` }}>
-      {/* phones: drag this bar to give the video or the tracks more height (double-tap: automatic) */}
-      {phone && <div className="tsplit" title="Drag to resize the video and the tracks · double-tap for the automatic size"
-        onDoubleClick={() => setUI({ phoneVid: null })}
-        onPointerDown={(e) => {
-          e.preventDefault(); e.stopPropagation();
-          const ws = (e.currentTarget.closest(".ws") as HTMLElement).getBoundingClientRect();
-          const mv = (ev: PointerEvent) => setUI({ phoneVid: Math.round(Math.min(0.85, Math.max(0.15, (ev.clientY - ws.top) / ws.height)) * 1000) / 1000 });
-          const up = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); };
-          addEventListener("pointermove", mv); addEventListener("pointerup", up);
-        }}><i /></div>}
       <AnimatePresence>{rmenu && (
         <motion.div key="rmenu" className="rmenu-back" {...anim.fade} onPointerDown={(e) => { if (e.target === e.currentTarget) setRmenu(null); }}>
           <motion.div className="cmenu rmenu" role="menu" {...anim.pop} style={{ left: Math.min(rmenu.x, innerWidth - 230), top: Math.min(rmenu.y + 6, innerHeight - 200) }}>
@@ -465,7 +455,15 @@ export function Timeline() {
           <ZoomFader value={pps2v(pps)} onChange={(v) => zoomTo(v2pps(v))} />
           <span className="zunit" title="Time between the ruler's small ticks">{tickLabel}</span>
           <button className="ib" title="Zoom in (+)" onClick={() => zoomTo(pps * 2.5)}><Icon name="zin" /></button>
-          <button className="chip" title="Fit the whole scene in view" onClick={() => setUI({ pps: (W - 36) / (project.duration * 1.25 + 0.5), viewStart: 0 })}>Fit</button>
+          <button className="chip" title="Fit everything in view: from the start to the end of the last clip or canvas" onClick={() => {
+            // from the start to the end of whatever runs longest (a clip, a canvas or a canvas effect), edge to edge
+            const end = Math.max(0.5, ...project.items.map((i) => i.end), ...(project.backgrounds ?? []).map((b) => b.end), ...project.effects.map((f) => f.end));
+            userZoomed.current = true;
+            // measured now (never a remembered width)
+            const w = lanesRef.current?.clientWidth || W;
+            if (w !== W) setW(w);
+            setUI({ pps: Math.max(2, (w - PAD - 14) / end), viewStart: 0 });
+          }}>Fit</button>
         </div>
       </div>
 
@@ -510,6 +508,9 @@ export function Timeline() {
           {/* everything after the video's end is dimmed; drag the end marker to change the length */}
           <div className="tlafter" style={{ left: Math.max(0, x(project.duration)) }} />
           <div className="ruler" onPointerDown={startScrub} onContextMenu={(e) => { e.preventDefault(); scrub(e); setRmenu({ x: e.clientX, y: e.clientY }); }}>
+            {/* phones have only this ruler, so the time marks and numbers are here */}
+            {phone && ticks.map((k, i) => <i key={i} className={"tick" + (k.maj ? " maj" : "")} style={{ left: k.x }} />)}
+            {phone && ticks.filter((k) => k.label).map((k, i) => <span key={"l" + i} className="tlab" style={{ left: k.x }}>{k.label}</span>)}
             {ui.loop && (
               <div className={"loopband" + (ui.loop.on ? " on" : "")} style={{ left: x(ui.loop.a), width: Math.max(2, (ui.loop.b - ui.loop.a) * pps) }}
                 title={`Loop ${ui.loop.a.toFixed(2)}s → ${ui.loop.b.toFixed(2)}s · L turns it ${ui.loop.on ? "off" : "on"} · right-click to remove`}
@@ -693,7 +694,8 @@ export function Timeline() {
           <span style={{ display: "none" }}>{totalH}</span>
         </div>
       </div>
-      <PlayerBar />
+      {/* phones: the play controls are a sidebar beside the video instead */}
+      {!phone && <PlayerBar />}
     </section>
   );
 
@@ -895,7 +897,7 @@ function TrackToggles({ track }: { track: Track }) {
 function ZoomFader({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
     <div className="zf">
-      <Fader value={value} min={0} max={ZSTEPS} step={1} onChange={onChange} label="Timeline zoom"
+      <Fader value={value} min={0} max={ZSTEPS} step={1} onChange={onChange} label="Timeline zoom" touchNudge={1300 /* ≈ 60px of finger travel doubles the zoom */}
         title="Zoom the timeline · drag (Shift = fine), ←/→, or Ctrl+scroll on the timeline" />
     </div>
   );
