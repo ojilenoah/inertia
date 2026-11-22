@@ -1377,7 +1377,7 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .gease { display: none; }
 /* phones: a light blur behind whatever card, menu or popup is open (the ☰ menu has its own) */
 .mo.phone:has(.epanel, .cmenu, .rmenu, .histpop, .gridpop, .shpop, .trpick, .mkpop, .cbubble)::after {
-  content: ""; position: fixed; inset: 0; z-index: 60; pointer-events: none;
+  content: ""; position: fixed; inset: 0; z-index: 50; pointer-events: none; /* under every popup, card and floating bar (z ≥ 60) */
   background: rgba(0, 0, 0, .06); -webkit-backdrop-filter: blur(1.5px); backdrop-filter: blur(1.5px);
 }
 /* …but an edit card never blurs the video above it: the item being edited stays sharp */
