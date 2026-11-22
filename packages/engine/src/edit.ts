@@ -1,7 +1,7 @@
 import { migrateTextAnim } from "./textanim";
 import { allKeyTimes } from "./morph";
 // Pure-ish edit helpers. They mutate the draft they are given (use with immer).
-import { itemState, itemsInGroup, ownValue } from "./evaluate";
+import { itemsInGroup, ownValue, parentState } from "./evaluate";
 import { splitMotionAt } from "./motion";
 import type { ItemKind, Ease, Item, Keyframe, Project, Prop, Seconds, Track } from "./types";
 
@@ -216,6 +216,19 @@ export function groupTracks(project: Project, ids: string[], name?: string): str
 export function ungroupTrack(project: Project, gid: string) {
   const g = project.tracks.find((t) => t.id === gid && t.kind === "group");
   if (!g) return;
+  // what the group carried goes to what was in it: its mask and its parent (each piece keeps its own if it has one)
+  for (const t of project.tracks.filter((x) => x.parent === gid)) {
+    if (t.kind === "group") {
+      if (g.mask && !t.mask) t.mask = { ...g.mask };
+      if (g.parentLink && !t.parentLink) t.parentLink = { ...g.parentLink };
+    } else for (const it of project.items.filter((i) => i.trackId === t.id)) {
+      if (g.mask && !it.mask && g.mask.by !== it.id) it.mask = { ...g.mask };
+      if (g.parentLink && !it.parentLink && g.parentLink.id !== it.id) it.parentLink = { ...g.parentLink };
+    }
+  }
+  // anything masked by the group itself is masked by nothing now (there's no group left to cut with)
+  for (const it of project.items) if (it.mask?.by === gid) delete it.mask;
+  for (const t of project.tracks) if (t.mask?.by === gid) delete t.mask;
   // its tracks (and groups) move up one level
   for (const t of project.tracks) if (t.parent === gid) { if (g.parent) t.parent = g.parent; else delete t.parent; }
   project.tracks = project.tracks.filter((t) => t !== g);
@@ -295,14 +308,17 @@ export function groupItems(project: Project, ids: string[], name?: string): stri
   const top = project.tracks.find((t) => t.id === nodes[0])!;
   const oldTracks = new Set(items.map((it) => it.trackId));
   const group: Track = { id: gid, name: name ?? `Group ${gid.slice(1)}`, kind: "group", open: true, keys: {}, ...(common ? { parent: common } : {}) };
-  const kids: Track[] = [];
+  let kidN = 0;
   for (const nid of nodes) {
     const t = project.tracks.find((x) => x.id === nid)!;
     if (t.kind === "group") { t.parent = gid; continue; } // a whole group goes inside
-    // an item's own track: the chosen items on it move to a fresh track in the new group
-    for (const it of items.filter((x) => x.trackId === nid)) { const k: Track = { id: nextId("H"), name: `Track ${kids.length + 1}`, kind: "video", parent: gid }; kids.push(k); it.trackId = k.id; }
+    // an item's own track: the chosen items on it move to a fresh track in the new group, at that track's place
+    // in the stack (so what was in front stays in front — a mask stays under what it holds)
+    const fresh: Track[] = [];
+    for (const it of items.filter((x) => x.trackId === nid)) { const k: Track = { id: nextId("H"), name: `Track ${++kidN}`, kind: "video", parent: gid }; fresh.push(k); it.trackId = k.id; }
+    project.tracks.splice(project.tracks.indexOf(t), 0, ...fresh);
   }
-  project.tracks.splice(project.tracks.indexOf(top), 0, group, ...kids);
+  project.tracks.splice(project.tracks.indexOf(top) >= 0 ? Math.min(project.tracks.indexOf(top), ...project.tracks.map((x, i) => (x.parent === gid ? i : Infinity))) : 0, 0, group);
   // remove tracks the items left empty (keep at least one normal track)
   project.tracks = project.tracks.filter((t) => {
     if (!oldTracks.has(t.id) || t.kind !== "video" || project.items.some((i) => i.trackId === t.id)) return true;
@@ -552,21 +568,21 @@ export function itemLocked(project: Project, it: Item): boolean {
  * mask) removes that link. Links made by hand are left alone. Run after every edit.
  */
 export function syncMaskParents(p: Project, t: Seconds) {
-  const link = (by: Item) => {
-    const P = itemState(p, by, Math.min(Math.max(t, by.start), by.end - 1e-3));
+  const link = (by: Item, child: Item | Track) => {
+    const P = parentState(p, by, Math.min(Math.max(t, by.start), by.end - 1e-3), child);
     return { id: by.id, x0: P.x, y0: P.y, rz0: P.rz, s0: P.scale, auto: true };
   };
   const want = (m: Item["mask"]) => (m && !m.free ? p.items.find((i) => i.id === m.by) : undefined);
   for (const it of p.items) {
     const by = want(it.mask);
-    if (by && by.id !== it.id && by.parentLink?.id !== it.id) { if (!it.parentLink || (it.parentLink.auto && it.parentLink.id !== by.id)) it.parentLink = link(by); }
+    if (by && by.id !== it.id && by.parentLink?.id !== it.id) { if (!it.parentLink || (it.parentLink.auto && it.parentLink.id !== by.id)) it.parentLink = link(by, it); }
     else if (it.parentLink?.auto) delete it.parentLink;
   }
   for (const tr of p.tracks) {
     if (tr.kind !== "group") continue;
     const by = want(tr.mask);
     const inside = by && itemsInGroup(p, tr.id).some((i) => i.id === by.id);
-    if (by && !inside) { if (!tr.parentLink || (tr.parentLink.auto && tr.parentLink.id !== by.id)) tr.parentLink = link(by); }
+    if (by && !inside) { if (!tr.parentLink || (tr.parentLink.auto && tr.parentLink.id !== by.id)) tr.parentLink = link(by, tr); }
     else if (tr.parentLink?.auto) delete tr.parentLink;
   }
 }

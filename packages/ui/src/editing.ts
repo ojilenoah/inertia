@@ -70,7 +70,7 @@ export function copyStyle() {
   if (it.shape) style.shape = JSON.parse(JSON.stringify(it.shape));
   if (it.line) style.line = { ...it.line, pts: [] } as Item["line"];
   styleClip = { from: it.kind, style };
-  s.toast("Style copied · select other items and paste (Ctrl+Alt+V)");
+  s.toast("Style copied");
 }
 export function pasteStyle() {
   const s = useStore.getState();
@@ -165,7 +165,7 @@ export function copyPickedKeys(): boolean {
     dt: t - ks.times[0],
     vals: Object.fromEntries((Object.keys(it.keys) as Prop[]).flatMap((p) => { const k = it.keys[p]?.find((q) => Math.abs(q.t - t) < 1e-3); return k ? [[p, { v: k.v, ease: k.ease }]] : []; })),
   }));
-  s.toast(`${ks.times.length} keyframe${ks.times.length === 1 ? "" : "s"} copied · select an item and press Ctrl+V to paste at the playhead`);
+  s.toast(`${ks.times.length} keyframe${ks.times.length === 1 ? "" : "s"} copied`);
   return true;
 }
 /** Paste copied keyframes into the selected item, starting at the playhead. */
@@ -258,7 +258,7 @@ export function groupSelection() {
     return;
   }
   let g: string | null = null; s.edit((p) => { g = groupTracks(p, sel); });
-  if (g) { s.setUI({ selTracks: [g] }); s.toast("Tracks grouped"); } else s.toast("Select two or more items (Shift-click or drag a box on the canvas), then Ctrl+G");
+  if (g) { s.setUI({ selTracks: [g] }); s.toast("Tracks grouped"); } else s.toast("Select two or more items first");
 }
 /** Ungroup the selected group, or the group the selected item is in (Ctrl+Shift+G). */
 export function ungroupSelection() {

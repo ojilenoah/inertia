@@ -130,7 +130,7 @@ export function BoardPlane({ project, cam, setCam, size, live }: { project: Proj
       let c: Background | null = null;
       const after = m.canvasId ?? cs.at(-1)!.id;
       edit((p) => { c = insertCanvasAfter(p, after, uid("bg"), 3, m.canvasId ? undefined : { x: Math.round(m.bx - project.width / 2), y: Math.round(m.by - project.height / 2) }); });
-      if (c) { go(c); toast(`${(c as Background).name} added · it fades in from the canvas before it`); }
+      if (c) { go(c); toast(`${(c as Background).name} added`); }
     },
     dup: (id: string) => {
       let c: Background | null = null;

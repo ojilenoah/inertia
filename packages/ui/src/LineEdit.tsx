@@ -168,7 +168,7 @@ export function LineEditor({ project, item, t, k }: { project: Project; item: It
       change((pts, ctrl) => { pts.splice(seg + 1, 0, q); ctrl.splice(seg, 0, null); });
     }
     setSel({ node: seg + 1 });
-    useStore.getState().toast("Node added · drag it · right-click (long-press) deletes it");
+    useStore.getState().toast("Node added");
   };
   /** press on a piece of the line: dragging moves the whole line (the line underneath takes it); a tap bends it */
   const downSeg = (e: React.PointerEvent, seg: number) => {
@@ -252,7 +252,7 @@ export function LineEditor({ project, item, t, k }: { project: Project; item: It
           <path key={"s" + i} className={"lseg" + (pickedSeg === i ? " on" : "")} d={d} strokeWidth={Math.max(14 / k, l.width * s.scale)}
             onPointerDown={(e) => downSeg(e, i)} onDoubleClick={(e) => { e.stopPropagation(); insertOn(i, canvasPt(e, svgOf(e))); }}
             onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); insertOn(i, canvasPt(e, svgOf(e))); }}>
-            <title>Tap to bend · drag to move the line · right-click (long-press) to add a node here</title>
+            <title>Tap to bend · hold to add a node</title>
           </path>
         );
       })}
@@ -285,7 +285,7 @@ export function LineEditor({ project, item, t, k }: { project: Project; item: It
       {world.map((p, i) => (showAll || i === 0 || i === world.length - 1) && (
         <circle key={"p" + i} className="lnode" cx={p[0]} cy={p[1]} r={(pickedNode === i ? 7.5 : 6) / k} fill={pickedNode === i ? "var(--accent)" : "#fff"} stroke={col} strokeWidth={sw}
           onPointerDown={(e) => downNode(e, i)} onContextMenu={(e) => deleteNode(e, i)}>
-          <title>Drag to move · tap to pick it (then + adds nodes after it) · right-click (long-press) to delete</title>
+          <title>Drag to move · hold to delete</title>
         </circle>
       ))}
       {/* the picked node's +: add nodes after it */}
@@ -293,7 +293,7 @@ export function LineEditor({ project, item, t, k }: { project: Project; item: It
         const [x, y] = world[pickedNode], px = x + 30 / k, on = ext === pickedNode;
         return (
           <g className={"lplus" + (on ? " on" : "")} onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); setHover(null); setExt(on ? null : pickedNode); }}>
-            <title>{on ? "Stop adding nodes" : "Add nodes after this one: tap here, then tap where each goes"}</title>
+            <title>{on ? "Stop adding nodes" : "Add nodes after this one"}</title>
             <circle cx={px} cy={y} r={9 / k} />
             <path d={`M${px - 4.5 / k} ${y}H${px + 4.5 / k}M${px} ${y - 4.5 / k}V${y + 4.5 / k}`} strokeWidth={sw} />
           </g>

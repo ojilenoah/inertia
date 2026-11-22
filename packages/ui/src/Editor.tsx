@@ -1,3 +1,4 @@
+import { MaskPicker } from "./MaskPick";
 import { useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { anim } from "./anim";
@@ -128,7 +129,8 @@ function useShortcuts() {
           s.toast(lp?.on ? "Loop off" : "Loop on");
           break;
         }
-        case "v": s.setUI({ tool: "select" }); break;
+        case "v": s.setUI({ tool: "select", hand: false }); break;
+        case "h": s.setUI({ hand: !s.ui.hand, pinning: null, ctx: null }); s.toast(s.ui.hand ? "Select" : "Hand: drag to move around, scroll to zoom"); break;
         case "b": s.setUI({ tool: "blade" }); break;
         case "r": s.setUI({ tool: "ripple" }); break;
         case "n": s.setUI({ snap: !s.ui.snap }); break;
@@ -215,7 +217,7 @@ export function Editor() {
           <Timeline />
           {stacked && <PlayerBar />}
           {/* phones: the handle on the gap between the video and the tracks: drag for more of either (double-tap: automatic) */}
-          {stacked && <div className="tsplit" title="Drag to resize the video and the tracks · double-tap for the automatic size"
+          {stacked && <div className="tsplit" title="Drag to resize"
             onDoubleClick={() => useStore.getState().setUI({ phoneVid: null })}
             onPointerDown={(e) => {
               e.preventDefault(); e.stopPropagation();
@@ -234,6 +236,7 @@ export function Editor() {
       {stacked && <PhoneDim />}
       <Tooltips />
       <CanvasMenu />
+      <MaskPicker />
       <TrackBar />
       <EditPanel />
       <ExportDialog />

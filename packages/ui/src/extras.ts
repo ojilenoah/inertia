@@ -1,5 +1,6 @@
 import type { Item, ItemState, Project, ShapeSpec } from "@moshion/engine";
-import { followOffset, itemState, itemsInGroup, motionAt, numAt, pathPivot, pathTransform, pathTransformZ, sampleKeys, pieceFx, resolveItem, shapeAt, splitPieces, textAnimOf, textUnit } from "@moshion/engine";
+import { lineShape } from "@moshion/engine";
+import { followOffset, groupChain, itemState, itemsInGroup, motionAt, numAt, pathPivot, pathTransform, pathTransformZ, sampleKeys, pieceFx, resolveItem, shapeAt, splitPieces, textAnimOf, textUnit } from "@moshion/engine";
 import { outlinePoints } from "./shapeMorph";
 
 type Pt = [number, number];
@@ -30,18 +31,17 @@ export function maskFollowers(project: Project, ids: string[]): string[] {
       if (all.includes(o.id) || o.kind === "audio") continue;
       // (only items the mask doesn't already carry as their parent)
       const own = o.mask && !o.mask.free && all.includes(o.mask.by) && o.parentLink?.id !== o.mask.by;
-      const tr = project.tracks.find((x) => x.id === o.trackId), g = tr?.parent ? project.tracks.find((x) => x.id === tr.parent) : undefined;
-      const viaGroup = !o.mask && g?.mask && !g.mask.free && all.includes(g.mask.by) && g.parentLink?.id !== g.mask.by;
+      const g = o.mask ? undefined : groupChain(project, o).find((x) => x.mask);
+      const viaGroup = !!g?.mask && !g.mask.free && all.includes(g.mask.by) && g.parentLink?.id !== g.mask.by;
       if (own || viaGroup) { all.push(o.id); grew = true; }
     }
   }
   return all.slice(ids.length);
 }
-/** The mask an item uses: its own, or else its group's. */
+/** The mask an item uses: its own, or else the nearest group around it that has one (groups inside groups too). */
 export function maskOf(project: Project, item: Item): Item["mask"] {
   if (item.mask) return item.mask;
-  const tr = project.tracks.find((t) => t.id === item.trackId);
-  return tr?.parent ? project.tracks.find((g) => g.id === tr.parent)?.mask : undefined;
+  return groupChain(project, item).find((g) => g.mask)?.mask;
 }
 function specOf(it: Item): ShapeSpec | null {
   if (it.kind === "shape" && it.shape) return it.shape;
@@ -382,6 +382,8 @@ export function depthStep(it: Item, base: string): { dx: number; dy: number; col
 /** One letter placed on a path: its width, and the 2D matrix (a b c d e f) that puts it on the canvas. */
 export type Glyph = { ch: string; w: number; m: [number, number, number, number, number, number]; a: number };
 /** Items text can run along: lines, motion paths and anything with an outline (circle, square, star, shapes…). */
+/** Items that can ride along something (everything that's drawn, except lines and paths themselves). */
+export const canRide = (it: Item) => !["line", "motion", "audio", "camera"].includes(it.kind);
 export const canCarryText = (it: Item) => it.kind === "line" || it.kind === "motion" || (it.kind !== "text" && !!specOf(it));
 const textCase = (t: string, c?: string) => (c === "uppercase" ? t.toUpperCase() : c === "lowercase" ? t.toLowerCase() : c === "capitalize" ? t.replace(/\b\p{L}/gu, (m) => m.toUpperCase()) : t);
 let meas: CanvasRenderingContext2D | null = null;
@@ -456,7 +458,12 @@ function pathSource(project: Project, item: Item, t: number): PathSrc | null {
   const ps = itemState(project, p, tc);
   const tilted = !flat3(ps);
   const map = (q: Pt, z = 0) => toWorld(ps, p, q, z);
-  if (p.kind === "line" && p.line) return { pts: p.line.pts.map(([u, v]) => [(u + 0.5) * p.w, (v + 0.5) * p.h] as Pt), closed: false, map, unit: ps.scale || 1, tilted, center: [p.w / 2, p.h / 2] };
+  if (p.kind === "line" && p.line) {
+    // the line as it's drawn: its curves and rounded corners, not just straight from point to point
+    const L = p.line, px = (q: Pt): Pt => [(q[0] + 0.5) * p.w, (q[1] + 0.5) * p.h];
+    const ctrl = L.ctrl?.map((c) => (c ? [px(c[0]), px(c[1])] as [Pt, Pt] : null));
+    return { pts: lineShape(L.pts.map(px), ctrl, L.round ?? 0), closed: false, map, unit: ps.scale || 1, tilted, center: [p.w / 2, p.h / 2] };
+  }
   let loc = localOutline(p, tc);
   // a hollow shape's inner edge: the hole's outline (the same shape, the rim's thickness in from every side)
   const th = item.pathText?.edge === "inner" ? Math.min(numAt(p, "hollow", tc - p.start), Math.min(p.w, p.h) / 2 - 1) : 0;
@@ -471,10 +478,10 @@ function pathSource(project: Project, item: Item, t: number): PathSrc | null {
  * (or stand up off it), and text following a motion bends round the route instead of moving as a block.
  */
 /** The path the text runs along, in the direction it runs, with distances along it. */
-function runPath(src: PathSrc, o: NonNullable<Item["pathText"]>) {
+function runPath(src: PathSrc, o: NonNullable<Item["pathText"]>, standing = !!o.stand) {
   let pts = src.pts;
   // standing letters read from the front when they run the other way round
-  const flip = o.stand && src.tilted && src.closed ? !o.flip : !!o.flip;
+  const flip = standing && src.tilted && src.closed ? !o.flip : !!o.flip;
   if (flip) pts = src.closed ? [pts[0], ...pts.slice(1).reverse()] : [...pts].reverse();
   if (src.closed) pts = [...pts, pts[0]];
   const lens = [0];
@@ -502,6 +509,33 @@ function runPath(src: PathSrc, o: NonNullable<Item["pathText"]>) {
  * (or stand up off it), and text following a motion bends round the route instead of moving as a block.
  * "Along" is where the middle of the text is; `center` is that point on the canvas (the text's box sits there).
  */
+/** How far something on a path is turned round the edge (degrees; older "stand up" text counts as 90). */
+export function pathTiltOf(item: Item, local: number): number {
+  if (item.pathTilt == null && !item.numKeys?.pathTilt?.length && item.pathText?.stand) return 90;
+  return numAt(item, "pathTilt", local);
+}
+/** Which way is "up" off a path's surface on screen (+1 / −1), so turned-up things lean towards you. */
+function upOf(src: PathSrc): number {
+  if (!src.center) return 1;
+  const c0 = src.map(src.center), c1 = src.map(src.center, 10);
+  return c1[1] - c0[1] > 0 ? -1 : 1;
+}
+/**
+ * A spot on a path, hinged round the edge: where something's middle lands on the canvas (`off` from the line, in
+ * the path's units) and its across / down directions there. `tilt` (radians) turns it round the edge: 0 lies in
+ * the surface, 90° stands up off it, anything between leans, past 90° folds over to the other side.
+ */
+function hingeAt(src: PathSrc, at: (d: number) => Pt, d: number, off: number, tilt: number, h: number, e: number, upZ: number) {
+  const P = at(d), A = at(d - h), B = at(d + h);
+  let tx = B[0] - A[0], ty = B[1] - A[1];
+  const L = Math.hypot(tx, ty) || 1; tx /= L; ty /= L;
+  if (src.upright) { tx = 1; ty = 0; }
+  const nx = -ty, ny = tx, ct = Math.cos(tilt), dz = -upZ * Math.sin(tilt); // "down": in the surface, turned out of it by tilt
+  const C: Pt = [P[0] + nx * off * ct, P[1] + ny * off * ct], cz = dz * off;
+  const O = src.map(C, cz), X = src.map([C[0] + tx * e, C[1] + ty * e], cz), Y = src.map([C[0] + nx * e * ct, C[1] + ny * e * ct], cz + dz * e);
+  return { O, ax: [(X[0] - O[0]) / e, (X[1] - O[1]) / e] as Pt, by: [(Y[0] - O[0]) / e, (Y[1] - O[1]) / e] as Pt };
+}
+
 export function pathGlyphs(project: Project, item: Item, t: number, sans: string): { glyphs: Glyph[]; size: number; font: string; center: { x: number; y: number; angle: number } } | null {
   if (item.kind !== "text") return null;
   const src = pathSource(project, item, t);
@@ -514,7 +548,8 @@ export function pathGlyphs(project: Project, item: Item, t: number, sans: string
   const chars = [...textCase(item.text ?? "", item.textCase).replace(/\s*\n\s*/g, " ")];
   const widths = chars.map((ch) => charW(font, ch) * k + spacing);
   const textW = widths.reduce((a, b) => a + b, 0);
-  const { total, at } = runPath(src, o);
+  const tilt = (pathTiltOf(item, local) * Math.PI) / 180;
+  const { total, at } = runPath(src, o, Math.abs(Math.sin(tilt)) > 0.7);
   if (!(total > 0)) return null;
   // where the middle of the text is along the path, and how far off the line it sits (the gap, in canvas px)
   const middle = (src.anchor ?? 0) + (pathOffset(item, local) / 100) * total;
@@ -523,27 +558,10 @@ export function pathGlyphs(project: Project, item: Item, t: number, sans: string
   const h = Math.max(1.5, size * 0.3), e = Math.max(1, size * 0.25);
   const shift = o.side === "under" ? 0.36 : o.side === "middle" ? 0 : -0.36; // letters' middle, off the line (× size, down is +)
   const off = shift * size + (o.side === "under" ? gap : -gap); // the gap pushes them further out (or further in)
-  // standing letters point "up" out of the surface: whichever way looks up on screen
-  let upZ = 1;
-  if (o.stand && src.tilted && src.center) { const c0 = src.map(src.center), c1 = src.map(src.center, 10); upZ = c1[1] - c0[1] > 0 ? -1 : 1; }
+  // turned up letters lean "up" out of the surface: whichever way looks up on screen
+  const upZ = upOf(src);
   /** a letter's place at distance d along the path: where its middle lands, and its across / down directions on the canvas */
-  const place = (d: number) => {
-    const P = at(d), A = at(d - h), B = at(d + h);
-    let tx = B[0] - A[0], ty = B[1] - A[1];
-    const L = Math.hypot(tx, ty) || 1; tx /= L; ty /= L;
-    if (src.upright) { tx = 1; ty = 0; }
-    let O: Pt, X: Pt, Y: Pt;
-    if (o.stand && src.tilted) {
-      // standing up off the surface: across = along the path, down = into the surface
-      const zc = -off * upZ;
-      O = src.map(P, zc); X = src.map([P[0] + tx * e, P[1] + ty * e], zc); Y = src.map(P, zc - upZ * e);
-    } else {
-      const nx = -ty, ny = tx; // "down" for the letter
-      const Q: Pt = [P[0] + nx * off, P[1] + ny * off];
-      O = src.map(Q); X = src.map([Q[0] + tx * e, Q[1] + ty * e]); Y = src.map([Q[0] + nx * e, Q[1] + ny * e]);
-    }
-    return { O, ax: [(X[0] - O[0]) / e, (X[1] - O[1]) / e] as Pt, by: [(Y[0] - O[0]) / e, (Y[1] - O[1]) / e] as Pt };
-  };
+  const place = (d: number) => hingeAt(src, at, d, off, tilt, h, e, upZ);
   const out: Glyph[] = [];
   let d = start;
   chars.forEach((ch, i) => {
@@ -568,7 +586,7 @@ export function pathGlyphs(project: Project, item: Item, t: number, sans: string
 export function pathOffsetAt(project: Project, item: Item, t: number, [wx, wy]: Pt, near: number): number | null {
   const src = pathSource(project, item, t);
   if (!src || src.pts.length < 2) return null;
-  const { pts, lens, total } = runPath(src, item.pathText ?? {});
+  const { pts, lens, total } = runPath(src, item.pathText ?? {}, Math.abs(Math.sin((pathTiltOf(item, t - item.start) * Math.PI) / 180)) > 0.7);
   if (!(total > 0)) return null;
   const W = pts.map((p) => src.map(p));
   let best = Infinity, bestD = 0;
@@ -582,4 +600,33 @@ export function pathOffsetAt(project: Project, item: Item, t: number, [wx, wy]: 
   let v = ((bestD - (src.anchor ?? 0)) / total) * 100;
   if (src.closed) v += Math.round((near - v) / 100) * 100;
   return Math.round(v * 10) / 10;
+}
+
+/** Something (not text) placed along a line or outline: where its middle lands and how it's turned there. */
+export interface ItemPlace { O: Pt; ax: Pt; by: Pt; f: number; rz: number; back: boolean; center: { x: number; y: number; angle: number } }
+/**
+ * Any item can ride a line, a shape's outline or a motion path, like text does: Along moves it along, Gap moves it
+ * off the line, Sits puts it on top / centred / under, and Turn hinges it round the edge (lying in the surface,
+ * standing up off it, or anywhere between). It follows the path's own 3D tilt.
+ */
+export function pathPlace(project: Project, item: Item, t: number): ItemPlace | null {
+  if (item.kind === "text" || !item.onPath) return null;
+  const src = pathSource(project, item, t);
+  if (!src || src.pts.length < 2) return null;
+  const local = t - item.start, s = itemState(project, item, t), o = item.pathText ?? {};
+  const tilt = (pathTiltOf(item, local) * Math.PI) / 180;
+  const { total, at } = runPath(src, o, Math.abs(Math.sin(tilt)) > 0.7);
+  if (!(total > 0)) return null;
+  const f = (Math.abs(s.scale) || 1) / src.unit; // its own px → the path's units
+  const ih = item.h * f, gap = numAt(item, "pathGap", local) / src.unit;
+  const off = o.side === "under" ? ih / 2 + gap : o.side === "middle" ? 0 : -ih / 2 - gap;
+  const d = (src.anchor ?? 0) + (pathOffset(item, local) / 100) * total;
+  const p = hingeAt(src, at, d, off, tilt, Math.max(1.5, item.w * f * 0.2), 1, upOf(src));
+  const rz = sampleKeys(item.keys.rz, local, item.base.rz ?? 0);
+  return { ...p, f, rz, back: p.ax[0] * p.by[1] - p.ax[1] * p.by[0] < 0, center: { x: p.O[0], y: p.O[1], angle: (Math.atan2(p.ax[1], p.ax[0]) * 180) / Math.PI } };
+}
+/** The CSS transform that puts an item at its place on a path (its own turn stays, within the surface). */
+export function placeCss(p: ItemPlace): string {
+  const f = p.f, n = (v: number) => +v.toFixed(6);
+  return `matrix(${n(p.ax[0] * f)},${n(p.ax[1] * f)},${n(p.by[0] * f)},${n(p.by[1] * f)},0,0)${p.rz ? ` rotate(${p.rz}deg)` : ""}`;
 }

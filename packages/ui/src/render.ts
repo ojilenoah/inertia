@@ -1,6 +1,8 @@
 import type { Item, ItemState, Project } from "@moshion/engine";
 import { arrowHeads, dashArray, fxOpt, hexA, shapeD } from "@moshion/engine";
 import type { MorphChar } from "@moshion/engine";
+import { pinHAt, pinMap, pinMatrix } from "@moshion/engine";
+import { morphLayout } from "./textmorph";
 import { activeBackground, backgroundCSS, bgVideoTime, itemState, pieceFx, splitPieces, textAnimOf, textUnit } from "@moshion/engine";
 import { activeLooks, looksTransform } from "./Looks";
 import { mediaBlob } from "./media";
@@ -8,7 +10,7 @@ import { drawParticles } from "./newitems";
 import { itemFxFilter, itemHidden, letterColors, resolveFx, resolveItem, resolveScene } from "@moshion/engine";
 import { itemShapeD } from "./shapeMorph";
 import { hollowParts } from "./shapeMorph";
-import { depthStep, lookShadows, maskItems, maskOutline, pathGlyphs, repeatCopies, textLetters, textMaskOf, type Glyph } from "./extras";
+import { depthStep, lookShadows, maskItems, maskOutline, pathGlyphs, pathPlace, repeatCopies, textLetters, textMaskOf, type Glyph, type ItemPlace } from "./extras";
 import { chartProgress, chartSVG, particlesAt, magicFrame, blurTrail, cameraAt, lookAt, textShown, mediaTime, volumeAt, stackAt, stackCompare, subLine, lineShape, transLayers, transitionAt } from "@moshion/engine";
 
 /*
@@ -349,11 +351,11 @@ function caseOf(t: string, c?: string) {
   return t;
 }
 
-/** Text between two text keyframes: leaving letters fade and close up, arriving ones grow in. */
+/** Text between two text keyframes: each changing letter drawn as the chosen kind of change has it (see morphChars). */
 function drawMorph(ctx: Ctx, it: Item, chars: (MorphChar & { color?: string })[], size: number, lh: number, pad: number) {
   const lines: MorphChar[][] = [[]];
   for (const c of chars) { if (c.ch === "\n") { if (c.kind === "keep" || c.f > 0.5) lines.push([]); } else lines[lines.length - 1].push({ ...c, ch: caseOf(c.ch, it.textCase) }); }
-  const wOf = (c: MorphChar) => ctx.measureText(c.ch).width * (c.kind === "keep" ? 1 : c.f);
+  const wOf = (c: MorphChar) => ctx.measureText(c.ch).width * (c.kind === "keep" ? 1 : c.w ?? c.f);
   const widths = lines.map((l) => l.reduce((a, c) => a + wOf(c), 0));
   const boxW = it.wrap ? it.w : Math.max(...widths, 1) + pad * 2, boxH = lines.length * lh + pad * 2;
   const x0 = -boxW / 2, y0 = -boxH / 2;
@@ -364,22 +366,25 @@ function drawMorph(ctx: Ctx, it: Item, chars: (MorphChar & { color?: string })[]
   const m = ctx.measureText("Hg");
   const asc = m.fontBoundingBoxAscent ?? size * 0.8, desc = m.fontBoundingBoxDescent ?? size * 0.2;
   ctx.textBaseline = "alphabetic";
+  const ds = devScale(ctx);
   lines.forEach((ln, i) => {
     const cw = boxW - pad * 2, lw = widths[i];
     let x = x0 + pad + ((it.align ?? "left") === "center" ? (cw - lw) / 2 : it.align === "right" ? cw - lw : 0);
     const by = y0 + pad + i * lh + (lh - (asc + desc)) / 2 + asc;
+    const mid = (asc - desc) / 2; // letters scale and flip around the middle of the line
     for (const c of ln) {
-      const full = ctx.measureText(c.ch).width, w = wOf(c);
-      if (c.f > 0.001) {
+      const full = ctx.measureText(c.ch).width, w = wOf(c), keep = c.kind === "keep";
+      const op = keep ? 1 : c.op ?? c.f, sc = keep ? 1 : c.sc ?? 1, sy = keep ? 1 : c.sy ?? 1;
+      if (op > 0.001 && sc * sy > 0.001) {
         ctx.save();
-        ctx.globalAlpha *= c.kind === "keep" ? 1 : c.f;
-        const sc = c.kind === "keep" ? 1 : 0.6 + 0.4 * c.f;
-        ctx.translate(x + w / 2, by + (c.kind === "keep" ? 0 : (1 - c.f) * size * (c.kind === "del" ? -0.25 : 0.25)));
-        ctx.scale(sc, sc);
+        ctx.globalAlpha *= op;
+        if (!keep && c.blur) { const fl = ctx.filter; ctx.filter = `${fl && fl !== "none" ? fl + " " : ""}blur(${(c.blur * size * ds).toFixed(2)}px)`; }
+        ctx.translate(x + w / 2, by - mid + (keep ? 0 : (c.dy ?? 0) * size));
+        ctx.scale(sc, sc * sy);
         if (it.textShadow) textShadowOn(ctx, it.textShadow);
         ctx.fillStyle = (c as MorphChar & { color?: string }).color ?? it.color ?? "#111";
-        ctx.fillText(c.ch, -full / 2, 0);
-        if (it.stroke?.width) { ctx.shadowColor = "transparent"; ctx.lineWidth = it.stroke.width; ctx.strokeStyle = it.stroke.color; ctx.strokeText(c.ch, -full / 2, 0); }
+        ctx.fillText(c.ch, -full / 2, mid);
+        if (it.stroke?.width) { ctx.shadowColor = "transparent"; ctx.lineWidth = it.stroke.width; ctx.strokeStyle = it.stroke.color; ctx.strokeText(c.ch, -full / 2, mid); }
         ctx.restore();
       }
       x += w;
@@ -387,13 +392,45 @@ function drawMorph(ctx: Ctx, it: Item, chars: (MorphChar & { color?: string })[]
   });
 }
 
+/** Text changing between two text keyframes, in place (the same layout as the editor, see morphLayout). */
+function drawMorphInPlace(ctx: Ctx, it: Item, tx: { morph?: MorphChar[]; from?: string; to?: string; u?: number }, size: number, lh: number, pad: number) {
+  const L = morphLayout(tx.morph ?? [], tx.from ?? "", tx.to ?? "", tx.u ?? 0, {
+    measure: (q) => (q ? ctx.measureText(q).width : 0), align: it.align ?? "left", maxW: it.wrap ? Math.max(1, it.w - pad * 2) : null, caseOf: (q) => caseOf(q, it.textCase),
+  });
+  const boxW = it.wrap ? it.w : L.w + pad * 2, boxH = L.lines * lh + pad * 2;
+  const x0 = -boxW / 2, y0 = -boxH / 2;
+  if (it.textBg) {
+    ctx.save(); ctx.globalAlpha *= it.bgOpacity ?? 1; ctx.fillStyle = it.textBg;
+    ctx.beginPath(); ctx.roundRect(x0, y0, boxW, boxH, Math.min(it.radius ?? 0, boxW / 2, boxH / 2)); ctx.fill(); ctx.restore();
+  }
+  const m = ctx.measureText("Hg");
+  const asc = m.fontBoundingBoxAscent ?? size * 0.8, desc = m.fontBoundingBoxDescent ?? size * 0.2, mid = (asc - desc) / 2;
+  const f = (it.align ?? "left") === "center" ? 0.5 : it.align === "right" ? 1 : 0;
+  const left = x0 + pad + (boxW - pad * 2 - L.w) * f, ds = devScale(ctx);
+  ctx.textBaseline = "alphabetic";
+  for (const c of L.chars) {
+    if (c.op <= 0.001 || c.sc * c.sy <= 0.001) continue;
+    const full = ctx.measureText(c.ch).width, by = y0 + pad + c.line * lh + (lh - (asc + desc)) / 2 + asc;
+    ctx.save();
+    ctx.globalAlpha *= c.op;
+    if (c.blur) { const fl = ctx.filter; ctx.filter = `${fl && fl !== "none" ? fl + " " : ""}blur(${(c.blur * size * ds).toFixed(2)}px)`; }
+    ctx.translate(left + c.x + full / 2, by - mid + c.dy * size);
+    ctx.scale(c.sc, c.sc * c.sy);
+    if (it.textShadow) textShadowOn(ctx, it.textShadow);
+    ctx.fillStyle = it.color ?? "#111";
+    ctx.fillText(c.ch, -full / 2, mid);
+    if (it.stroke?.width) { ctx.shadowColor = "transparent"; ctx.lineWidth = it.stroke.width; ctx.strokeStyle = it.stroke.color; ctx.strokeText(c.ch, -full / 2, mid); }
+    ctx.restore();
+  }
+}
+
 function drawText(ctx: Ctx, it: Item, s: ItemState, sans: string, local = 0, media?: { src: CanvasImageSource; w: number; h: number }) {
   const size = it.fontSize ?? 100, lh = size * (it.lineHeight ?? 0.9), pad = it.textBg ? it.textPad ?? 24 : 0;
   ctx.font = `${it.italic ? "italic " : ""}${it.fontWeight ?? 800} ${size}px ${it.fontFamily ? `"${it.fontFamily}", ` : ""}${sans}`;
   (ctx as Ctx & { letterSpacing: string; wordSpacing: string }).letterSpacing = `${(it.letterSpacing ?? -0.04) * size}px`;
   (ctx as Ctx & { wordSpacing: string }).wordSpacing = `${(it.wordSpacing ?? 0) * size}px`;
-  const morph = (it as Item & { __morph?: MorphChar[] }).__morph;
-  if (morph) { drawMorph(ctx, it, morph, size, lh, pad); return; }
+  const mt = (it as Item & { __mt?: { morph?: MorphChar[]; from?: string; to?: string; u?: number } }).__mt;
+  if (mt?.morph) { drawMorphInPlace(ctx, it, mt, size, lh, pad); return; }
   // letters with their own colours: drawn one by one (same layout as a morph with nothing changing)
   const lettersC = (it as Item & { __letters?: Map<number, string> | null }).__letters;
   if (lettersC && !textAnimOf(it)) {
@@ -587,6 +624,7 @@ function project3D(s: ItemState, u: number, v: number): [number, number, number]
 /** Draw `img` with its corner grid mapped to `dst` (perspective by many small affine triangles). */
 function drawWarped(ctx: Ctx, img: HTMLCanvasElement, sw: number, sh: number, N: number, dst: (i: number, j: number) => [number, number], pad: number) {
   const tri = (s0: number[], s1: number[], s2: number[], d0: number[], d1: number[], d2: number[]) => {
+    if (![d0[0], d0[1], d1[0], d1[1], d2[0], d2[1]].every(Number.isFinite)) return; // past a corner pin's horizon
     const den = (s1[0] - s0[0]) * (s2[1] - s0[1]) - (s2[0] - s0[0]) * (s1[1] - s0[1]);
     if (Math.abs(den) < 1e-9) return;
     const a = ((d1[0] - d0[0]) * (s2[1] - s0[1]) - (d2[0] - d0[0]) * (s1[1] - s0[1])) / den;
@@ -610,6 +648,72 @@ function drawWarped(ctx: Ctx, img: HTMLCanvasElement, sw: number, sh: number, N:
     tri(s00, s10, s11, d00, d10, d11);
     tri(s00, s11, s01, d00, d11, d01);
   }
+}
+
+/**
+ * A corner-pinned item: the flat picture of it mapped pixel by pixel onto the canvas. The pin and the item's own
+ * 3D turn are both perspective maps of a flat card, so together they're one exact map (no seams, no triangles):
+ * worked out from where the item's four corners land, then each canvas pixel looks up where it comes from.
+ */
+function drawPinned(ctx: Ctx, f: CanvasRenderingContext2D, pw: number, ph: number, q: number, it: Item, s: ItemState, H: number[], rs: RenderSession) {
+  const M = ctx.getTransform(), W = ctx.canvas.width, Hh = ctx.canvas.height;
+  // flat-canvas pixel (from its centre) → canvas pixel
+  const toOut = (u: number, v: number): [number, number] | null => {
+    const p = pinMap(H, u, v); if (!p) return null;
+    const [x, y] = project3D(s, p[0], p[1]);
+    return [M.a * x + M.c * y + M.e, M.b * x + M.d * y + M.f];
+  };
+  const hw = it.w / 2, hh = it.h / 2;
+  const corners = [toOut(-hw, -hh), toOut(hw, -hh), toOut(hw, hh), toOut(-hw, hh)];
+  if (corners.some((c) => !c)) return;
+  // the same map in flat-canvas pixels (centred), then turned round: canvas pixel → flat pixel
+  const G = pinMatrix(it.w * q, it.h * q, corners as [number, number][]);
+  if (!G) return;
+  const [a, b, c, d, e, g2, g, h, i] = G;
+  const A = e * i - g2 * h, B = c * h - b * i, C = b * g2 - c * e, D = g2 * g - d * i, E = a * i - c * g, F = c * d - a * g2, Gi = d * h - e * g, Hi = b * g - a * h, I = a * e - b * d;
+  // which canvas pixels it can reach: the margin's corners, or the whole canvas when they pass the horizon
+  const fw2 = pw / q / 2, fh2 = ph / q / 2;
+  const ext = [toOut(-fw2, -fh2), toOut(fw2, -fh2), toOut(fw2, fh2), toOut(-fw2, fh2)];
+  let x0 = 0, y0 = 0, x1 = W, y1 = Hh;
+  if (ext.every(Boolean)) {
+    x0 = Math.max(0, Math.floor(Math.min(...ext.map((p) => p![0])))); x1 = Math.min(W, Math.ceil(Math.max(...ext.map((p) => p![0]))));
+    y0 = Math.max(0, Math.floor(Math.min(...ext.map((p) => p![1])))); y1 = Math.min(Hh, Math.ceil(Math.max(...ext.map((p) => p![1]))));
+  }
+  const bw = x1 - x0, bh = y1 - y0;
+  if (bw <= 0 || bh <= 0) return;
+  const src = f.getImageData(0, 0, pw, ph).data;
+  const tmp = rs.fxTmp, tg = tmp.getContext("2d")!;
+  if (tmp.width < bw || tmp.height < bh) { tmp.width = Math.max(tmp.width, bw); tmp.height = Math.max(tmp.height, bh); }
+  const out = tg.createImageData(bw, bh), o = out.data;
+  const cx = pw / 2, cy = ph / 2;
+  for (let yy = 0; yy < bh; yy++) {
+    const Y = y0 + yy + 0.5;
+    for (let xx = 0; xx < bw; xx++) {
+      const X = x0 + xx + 0.5;
+      const wq = Gi * X + Hi * Y + I;
+      if (wq === 0) continue;
+      const u = (A * X + B * Y + C) / wq + cx - 0.5, v = (D * X + E * Y + F) / wq + cy - 0.5;
+      if (u < -1 || v < -1 || u > pw || v > ph) continue;
+      // bilinear: the four flat pixels around (u, v)
+      const ux = Math.floor(u), vy = Math.floor(v), fx = u - ux, fy = v - vy;
+      let r = 0, gg = 0, bb = 0, al = 0;
+      for (let k2 = 0; k2 < 4; k2++) {
+        const sx = ux + (k2 & 1), sy = vy + (k2 >> 1);
+        if (sx < 0 || sy < 0 || sx >= pw || sy >= ph) continue;
+        const wgt = ((k2 & 1) ? fx : 1 - fx) * ((k2 >> 1) ? fy : 1 - fy), j = (sy * pw + sx) * 4, sa = src[j + 3] * wgt;
+        r += src[j] * sa; gg += src[j + 1] * sa; bb += src[j + 2] * sa; al += sa;
+      }
+      if (al <= 0) continue;
+      const n = (yy * bw + xx) * 4;
+      o[n] = r / al; o[n + 1] = gg / al; o[n + 2] = bb / al; o[n + 3] = al;
+    }
+  }
+  tg.clearRect(0, 0, bw, bh);
+  tg.putImageData(out, 0, 0);
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(tmp, 0, 0, bw, bh, x0, y0, bw, bh);
+  ctx.restore();
 }
 
 /** Liquid glass, as in the editor: what's behind it, blurred, more saturated and brighter, with a rim and a soft shadow. */
@@ -640,15 +744,17 @@ function drawGlass(ctx: Ctx, it: Item, s: ItemState, rs: RenderSession) {
   ctx.restore();
 }
 
-async function drawItem(ctx: Ctx, raw: Item, s: ItemState, t: number, rs: RenderSession) {
+async function drawItem(ctx: Ctx, raw: Item, s: ItemState, t: number, rs: RenderSession, placed?: ItemPlace | null) {
   // look and text as they are at this moment (they can have keyframes)
   const tx = textShown(raw, t - raw.start);
   const lc = letterColors(raw, t - raw.start);
-  const it: Item & { __morph?: MorphChar[]; __shape?: { d: string; evenodd?: boolean }; __letters?: Map<number, string> | null; __hollow?: ReturnType<typeof hollowParts> } =
-    { ...resolveItem(raw, t - raw.start), __morph: tx.morph, __shape: raw.kind === "shape" ? itemShapeD(raw, t - raw.start, raw.w, raw.h) ?? undefined : undefined, __letters: lc, __hollow: hollowParts(raw, t - raw.start) };
+  const it: Item & { __mt?: typeof tx; __morph?: MorphChar[]; __shape?: { d: string; evenodd?: boolean }; __letters?: Map<number, string> | null; __hollow?: ReturnType<typeof hollowParts> } =
+    { ...resolveItem(raw, t - raw.start), __morph: tx.morph, __mt: tx, __shape: raw.kind === "shape" ? itemShapeD(raw, t - raw.start, raw.w, raw.h) ?? undefined : undefined, __letters: lc, __hollow: hollowParts(raw, t - raw.start) };
   if (it.kind === "glass") { drawGlass(ctx, it, s, rs); return; }
   const k = ctx.getTransform().a; // world px → output px
-  const tilted = Math.abs(s.rx % 360) > 0.05 || Math.abs(s.ry % 360) > 0.05 || Math.abs(s.z) > 0.05;
+  // corner pin: warped in perspective onto its four corners (in its own frame, before it turns)
+  const pinH = it.kind === "line" || it.kind === "motion" ? null : pinHAt(raw, t - raw.start);
+  const tilted = !!pinH || Math.abs(s.rx % 360) > 0.05 || Math.abs(s.ry % 360) > 0.05 || Math.abs(s.z) > 0.05;
   // which side faces us: the corners' winding flips when the back is showing
   const [ax, ay] = project3D(s, -1, -1), [bx, by] = project3D(s, 1, -1), [cx2, cy2] = project3D(s, 1, 1);
   const back = (bx - ax) * (cy2 - ay) - (by - ay) * (cx2 - ax) < 0 && it.kind !== "text";
@@ -684,17 +790,30 @@ async function drawItem(ctx: Ctx, raw: Item, s: ItemState, t: number, rs: Render
   ctx.save();
   ctx.globalAlpha = Math.max(0, Math.min(1, s.opacity));
   ctx.globalCompositeOperation = BLEND[it.blend ?? "normal"] ?? (it.blend as GlobalCompositeOperation);
-  if (!tilted) {
+  if (placed) {
+    // riding a line or outline: at its place there, hinged round the edge (its own turn within the surface)
+    const f = placed.f;
+    ctx.translate(placed.O[0], placed.O[1]);
+    ctx.transform(placed.ax[0] * f, placed.ax[1] * f, placed.by[0] * f, placed.by[1] * f, 0, 0);
+    ctx.rotate((placed.rz * Math.PI) / 180); ctx.scale(1 / q, 1 / q);
+    ctx.drawImage(flat, 0, 0, pw, ph, -pw / 2, -ph / 2, pw, ph);
+  } else if (!tilted) {
     ctx.translate(s.x, s.y); ctx.rotate((s.rz * Math.PI) / 180); ctx.scale(s.scale / q, s.scale / q);
     ctx.drawImage(flat, 0, 0, pw, ph, -pw / 2, -ph / 2, pw, ph);
+  } else if (pinH) {
+    drawPinned(ctx, f, pw, ph, q, it, s, pinH, rs);
   } else {
     const N = 14;
-    const dst = (i: number, j: number) => { const [x, y] = project3D(s, -fw / 2 + (i / N) * fw, -fh / 2 + (j / N) * fh); return [x, y] as [number, number]; };
+    const dst = (i: number, j: number) => {
+      let u = -fw / 2 + (i / N) * fw, v = -fh / 2 + (j / N) * fh;
+      if (pinH) { const q = pinMap(pinH, u, v); if (!q) return [NaN, NaN] as [number, number]; [u, v] = q; }
+      const [x, y] = project3D(s, u, v); return [x, y] as [number, number];
+    };
     // draw only the used part of the flat canvas
     const crop = rs.crop, cc = crop.getContext("2d")!;
     if (crop.width !== pw || crop.height !== ph) { crop.width = pw; crop.height = ph; } else cc.clearRect(0, 0, pw, ph);
     cc.drawImage(flat, 0, 0, pw, ph, 0, 0, pw, ph);
-    drawWarped(ctx, crop, pw, ph, N, dst, 0.6 / k);
+    drawWarped(ctx, crop, pw, ph, N, dst, 1.4 / k);
   }
   ctx.restore();
 }
@@ -872,7 +991,7 @@ async function renderPlain(out: HTMLCanvasElement, projectIn: Project, t: number
       for (const b of blurTrail(project, it, t)) await drawItem(g, it, { ...b.s, opacity: b.s.opacity * alpha * b.a }, b.t, rs);
       const path = it.kind === "text" && (it.onPath || it.follow) ? pathGlyphs(project, resolveItem(it, t - it.start), t, rs.sans) : null;
       if (path) drawTextOnPath(g, resolveItem(it, t - it.start), s, path);
-      else await drawItem(g, it, s, t, rs);
+      else await drawItem(g, it, s, t, rs, it.onPath ? pathPlace(project, it, t) : null);
     };
     if (tmk) {
       // a text mask: draw the item on its own sheet, then keep it only inside (or outside) the letters

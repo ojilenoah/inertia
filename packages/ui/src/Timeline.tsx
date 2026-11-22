@@ -8,6 +8,7 @@ import {
   ownValue, removeKey, removeLookAndTextKeys, ripple, shiftLookAndTextKeys, snap, snapTargets, splitItem, toBezier, ungroupTrack,
 } from "@moshion/engine";
 import type { NumKey } from "@moshion/engine";
+import { itemsInGroup } from "@moshion/engine";
 import { numAt as numAtE } from "@moshion/engine";
 import { addMarker, copyKeyframe, hasKeyClip, loopIn, loopOut, pasteKeyframe, toggleLock } from "./editing";
 import { AnimatePresence, motion } from "motion/react";
@@ -202,6 +203,41 @@ export function Timeline() {
       if (!moved && performance.now() - t0 < 450) scrub(ev); // a quick tap: the playhead goes there now
     };
     addEventListener("pointermove", mv); addEventListener("pointerup", up);
+  }
+
+  /** The track item (or group bar) under a point, looking through the playhead line; null on empty space. */
+  function clipUnder(x: number, y: number): HTMLElement | null {
+    for (const el of document.elementsFromPoint(x, y)) {
+      if ((el as HTMLElement).classList?.contains("phgrab") || el.closest(".playhead")) continue;
+      return el.closest<HTMLElement>(".clip[data-item], .clip[data-group]");
+    }
+    return null;
+  }
+  /** The time span of the track item (or group) under a point. */
+  function clipSpanAt(x: number, y: number): { start: number; end: number } | null {
+    const el = clipUnder(x, y), p = useStore.getState().project;
+    if (!el) return null;
+    if (el.dataset.item) { const it = p.items.find((i) => i.id === el.dataset.item); return it ? { start: it.start, end: it.end } : null; }
+    const its = itemsInGroup(p, el.dataset.group!);
+    return its.length ? { start: Math.min(...its.map((i) => i.start)), end: Math.max(...its.map((i) => i.end)) } : null;
+  }
+  /**
+   * The playhead's grab strip runs over the track items, but only empty space grabs it there: on an item the press
+   * (and a right-click / long-press or double-click) goes to the item underneath instead.
+   */
+  function passToClip(e: React.PointerEvent | React.MouseEvent): boolean {
+    const under = clipUnder(e.clientX, e.clientY);
+    if (!under) return false;
+    e.stopPropagation(); e.preventDefault();
+    const tgt = document.elementsFromPoint(e.clientX, e.clientY).find((el) => !(el as HTMLElement).classList?.contains("phgrab") && !el.closest(".playhead")) ?? under;
+    const n = e.nativeEvent;
+    const init = { bubbles: true, cancelable: true, clientX: e.clientX, clientY: e.clientY, button: e.button, buttons: e.buttons, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, altKey: e.altKey, metaKey: e.metaKey };
+    tgt.dispatchEvent(n instanceof PointerEvent ? new PointerEvent(n.type, { ...init, pointerId: n.pointerId, pointerType: n.pointerType, isPrimary: n.isPrimary }) : new MouseEvent(n.type, init));
+    return true;
+  }
+  function grabDown(e: React.PointerEvent) {
+    if (passToClip(e)) return;
+    startScrub(e);
   }
 
   function startScrub(e: React.PointerEvent) {
@@ -476,13 +512,13 @@ export function Timeline() {
       const got = pick(rectOf(ev));
       if (keys) {
         const n = (got as { times: number[] }[]).reduce((m, q) => m + q.times.length, 0);
-        if (n) toast(`${n} keyframe${n === 1 ? "" : "s"} picked · drag one to move them all · Alt-drag to stretch · Delete`);
+        if (n) toast(`${n} keyframe${n === 1 ? "" : "s"} picked`);
         return;
       }
       const ids = got as string[];
       if (!ids.length) select(null);
       else if (ids.length === 1) select(ids[0]);
-      else { useStore.getState().selectMany(ids); toast(`${ids.length} items selected · drag one to slide them all · Ctrl+G groups them`); }
+      else { useStore.getState().selectMany(ids); toast(`${ids.length} items selected`); }
     };
     addEventListener("pointermove", mv); addEventListener("pointerup", up);
   }
@@ -548,14 +584,14 @@ export function Timeline() {
           <ZoomFader value={pps2v(pps)} onChange={(v) => zoomTo(v2pps(v))} />
           <span className="zunit" title="Time between the ruler's small ticks">{tickLabel}</span>
           <button className="ib" title="Zoom in (+)" onClick={() => zoomTo(pps * 2.5)}><Icon name="zin" /></button>
-          <button className="chip" title="Fit everything in view: from the start to the end of the last clip or canvas" onClick={fitAll}>Fit</button>
+          <button className="chip" title="Fit everything in view" onClick={fitAll}>Fit</button>
         </div>
         </>)}
       </div>
 
       <div className={"tlbody" + (ui.hdrW < 56 ? " narrow" : "") + (ui.hdrW < 74 ? " noid" : "")} style={{ gridTemplateColumns: `${headW}px minmax(0,1fr)` }}>
         <div className="heads">
-          <div className="rulerpad">{phone ? <button className="chip fitpad" title="Fit everything in view: from the start to the end of the last clip or canvas" onClick={fitAll}>Fit</button> : <SortButton />}</div>
+          <div className="rulerpad">{phone ? <button className="chip fitpad" title="Fit everything in view" onClick={fitAll}>Fit</button> : <SortButton />}</div>
           <div className="hrows" ref={headsRef} onWheel={(e) => { rowsRef.current!.scrollTop += e.deltaY; }}>
             <AnimatePresence initial={false}>
             {rows.map((row, i) => row.kind === "graph"
@@ -573,11 +609,19 @@ export function Timeline() {
         <div
           className={"lanes" + (ui.tool === "blade" ? " blade" : "")}
           ref={lanesRef}
-          // clicking anywhere in the tracks while it plays stops it right there
+          // clicking in the tracks while it plays stops it. On empty space the playhead goes where you clicked; on a
+          // track item it stays put if it's over that item, else it moves to the item's nearer end (so it shows)
           onPointerDownCapture={(e) => {
             const s = useStore.getState();
             if (!s.playing || e.button !== 0) return;
             useStore.setState({ playing: false });
+            const span = clipSpanAt(e.clientX, e.clientY);
+            if (span) {
+              const fr = 1 / (s.project.fps || 30);
+              if (s.t < span.start) s.setT(span.start);
+              else if (s.t >= span.end) s.setT(Math.max(span.start, span.end - fr));
+              return;
+            }
             s.setT(Math.min(Math.max(tOf(e.clientX - lanesRef.current!.getBoundingClientRect().left), 0), s.project.duration));
           }}
           onDragOver={(e) => { if (e.dataTransfer.types.includes("moshion/asset")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } }}
@@ -603,14 +647,14 @@ export function Timeline() {
             {phone && ticks.filter((k) => k.label).map((k, i) => <span key={"l" + i} className="tlab" style={{ left: k.x }}>{k.label}</span>)}
             {ui.loop && (
               <div className={"loopband" + (ui.loop.on ? " on" : "")} style={{ left: x(ui.loop.a), width: Math.max(2, (ui.loop.b - ui.loop.a) * pps) }}
-                title={`Loop ${ui.loop.a.toFixed(2)}s → ${ui.loop.b.toFixed(2)}s · L turns it ${ui.loop.on ? "off" : "on"} · right-click to remove`}
+                title={`Loop ${ui.loop.a.toFixed(2)}s → ${ui.loop.b.toFixed(2)}s`}
                 onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setUI({ loop: null }); }} />
             )}
             {(project.markers ?? []).map((mk) => (
               <Marker key={mk.id} mk={mk} left={x(mk.t)} />
             ))}
             <i className={"tend" + (project.autoLength === false ? " manual" : "")} style={{ left: x(project.duration) }}
-              title={`Video ends at ${project.duration.toFixed(2)}s · drag to set the length yourself${project.autoLength === false ? "" : " (now it follows the last item)"}`}
+              title={`Video ends at ${project.duration.toFixed(2)}s · drag to change`}
               onPointerDown={(e) => {
                 e.stopPropagation(); e.preventDefault();
                 const lr = lanesRef.current!.getBoundingClientRect();
@@ -676,7 +720,7 @@ export function Timeline() {
                               onPointerDown={(e) => e.stopPropagation()}
                               onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter" || e.key === "Escape") (e.target as HTMLInputElement).blur(); }}
                               onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== it.name) edit((p) => { p.items.find((x) => x.id === it.id)!.name = v; }); setRenaming(null); }} />
-                          ) : <span className="cliphit" onDoubleClick={(e) => { e.stopPropagation(); setRenaming(it.id); }} title={`${it.name} · double-click to rename · drag an edge to trim · Alt-drag an edge to stretch its keyframes`} />}
+                          ) : <span className="cliphit" onDoubleClick={(e) => { e.stopPropagation(); setRenaming(it.id); }} title={it.name} />}
                           {it.locked && (
                             <button className="cliplock" title={`${it.name} is locked · click to unlock`}
                               onPointerDown={(e) => e.stopPropagation()}
@@ -684,7 +728,7 @@ export function Timeline() {
                           )}
                           {it.anim?.loop && <b className="loopb" title={`Throughout: ${loopLabel(it.anim.loop)}`}>∞</b>}
                           {keyTimes(it).map((kt) => (
-                            <i key={kt} className={"kd" + (keyAt(keyTimes(it), t - it.start) === kt ? " now" : "") + (pickedOn(ui.keySel, it.id).some((q) => Math.abs(q - kt) < 1e-3) ? " ksel" : "")} data-t={kt} style={{ left: kt * pps }} title={`Keyframe at ${fmtClock(it.start + kt)} · drag to move · right-click to delete`}
+                            <i key={kt} className={"kd" + (keyAt(keyTimes(it), t - it.start) === kt ? " now" : "") + (pickedOn(ui.keySel, it.id).some((q) => Math.abs(q - kt) < 1e-3) ? " ksel" : "")} data-t={kt} style={{ left: kt * pps }} title={`Keyframe at ${fmtClock(it.start + kt)}`}
                               onContextMenu={(e) => {
                                 e.preventDefault(); e.stopPropagation();
                                 const at = it.start + kt;
@@ -705,7 +749,7 @@ export function Timeline() {
                                   const nextSel = times.length ? [...rest, { itemId: it.id, times }] : rest;
                                   setUI({ keySel: nextSel.length ? nextSel : null });
                                   const n = pickedCount(nextSel);
-                                  if (n > 1 && !has) toast(`${n} keyframes picked · drag to move them · Alt-drag to stretch · Ctrl+C / Ctrl+V · Delete`);
+                                  if (n > 1 && !has) toast(`${n} keyframes picked`);
                                   return;
                                 }
                                 select(it.id);
@@ -781,7 +825,7 @@ export function Timeline() {
               <div className="phtag" onPointerDown={startScrub}>{fmtClock(t, dec)}</div>
               <div className="phtag bot" onPointerDown={startScrub}>{fmtClock(t, dec)}</div>
               {/* the line itself can be grabbed and dragged too */}
-              <i className="phgrab" onPointerDown={startScrub} title="Drag to move the playhead" />
+              <i className="phgrab" onPointerDown={grabDown} onContextMenu={(e) => { passToClip(e); }} onDoubleClick={(e) => { passToClip(e); }} title="Drag to move the playhead" />
             </div>
           )}
           <span style={{ display: "none" }}>{totalH}</span>
@@ -798,7 +842,7 @@ export function Timeline() {
     if (grp) return <button className="chip" title="Ungroup (Ctrl+Shift+G)" onClick={() => { edit((p) => ungroupTrack(p, grp.id)); setUI({ selTracks: [] }); }}>Ungroup</button>;
     const n = project.tracks.filter((t) => sel.includes(t.id) && t.kind === "video" && !t.parent).length;
     return (
-      <button className="chip" disabled={!n} style={{ opacity: n ? 1 : 0.4 }} title="Select normal track names (Ctrl/Shift-click), then group them (Ctrl+G)"
+      <button className="chip" disabled={!n} style={{ opacity: n ? 1 : 0.4 }} title="Group the selected tracks (Ctrl+G)"
         onClick={() => { let g: string | null = null; edit((p) => { g = groupTracks(p, sel); }); setUI({ selTracks: g ? [g] : [] }); }}>
         Group{n ? ` ${n}` : ""}
       </button>
@@ -961,7 +1005,7 @@ function SortButton() {
   const next = TRACK_SORTS[(i + 1) % TRACK_SORTS.length];
   return (
     <button className={"tsort" + (sort !== "layer" ? " on" : "")}
-      title={`Tracks sorted by ${TRACK_SORTS[i].label.toLowerCase()}${sort === "layer" ? " (top = in front)" : " · only the list changes, what's in front stays the same"} · click for ${next.label.toLowerCase()}`}
+      title={`Sorted by ${TRACK_SORTS[i].label.toLowerCase()}`}
       onClick={() => useStore.getState().setUI({ trackSort: next.id })}>
       <Icon name={({ layer: "sortLayer", type: "sortType", start: "sortStart", created: "sortNew", name: "sortName" } as Record<string, string>)[sort]} size={14} />
     </button>
@@ -994,7 +1038,7 @@ function ZoomFader({ value, onChange }: { value: number; onChange: (v: number) =
   return (
     <div className="zf">
       <Fader value={value} min={0} max={ZSTEPS} step={1} onChange={onChange} label="Timeline zoom" touchNudge={1300 /* ≈ 60px of finger travel doubles the zoom */}
-        title="Zoom the timeline · drag (Shift = fine), ←/→, or Ctrl+scroll on the timeline" />
+        title="Zoom the timeline" />
     </div>
   );
 }
@@ -1029,7 +1073,7 @@ function TrackHead({ track, alt, selected }: { track: Track; alt: boolean; selec
     <div className={"th row" + (track.parent ? " ch" : "") + (track.kind === "audio" ? " aud" : "")} style={{ height: ROW_H, ...indent, background: alt && !track.parent && track.kind !== "audio" ? "var(--lane)" : undefined, cursor: "pointer", ...selStyle }}
       onClick={(e) => selectTrack(track.id, e)}
       onContextMenu={(e) => { e.preventDefault(); askDeleteTrack(e, track); }}
-      title={`${track.name} · Ctrl/Shift-click several, then Group · right-click to delete`}>
+      title={track.name}>
       <span className="tid">{track.id}</span>
       <TrackToggles track={track} />
       <InsertTrack after={track.id} />
@@ -1130,7 +1174,7 @@ function CanvasBar({ id, x, t, close }: { id: string; x: number; t: number; clos
       <button className="ib" title="Canvas settings: size, length, background, looks, effects"
         onClick={(e) => { const r = (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect(); setUI({ panel: { section: "scene", itemId: null, canvas: !id, bgId: id || undefined, x: r.left + r.width / 2, y: r.top, anchor: { top: r.top, bottom: r.bottom } } }); close(); }}><Icon name="sparkle" /></button>
       <span className="fsep" />
-      <button className="ib" title="Add a canvas keyframe at the playhead: look and effect amounts can change between keyframes"
+      <button className="ib" title="Add a canvas keyframe"
         onClick={() => { edit((p) => addCanvasKey(p, useStore.getState().t)); toast(onKey ? "Already a canvas keyframe here" : "Canvas keyframe added · change a look or effect amount at another time to animate it"); }}><Icon name="keyadd" /></button>
       <button className="ib" disabled={!onKey} title={onKey ? "Delete the canvas keyframe at the playhead" : "Move the playhead onto a canvas keyframe to delete it"}
         onClick={() => edit((p) => removeCanvasKey(p, useStore.getState().t))}><Icon name="keydel" /></button>
@@ -1280,7 +1324,7 @@ function CanvasRow({ h, x, pps, tOf }: { h: number; x: (t: number) => number; pp
         );
       })}
       {(project.canvasKeys ?? []).map((k) => (
-        <i key={k} className="kd cvkd" style={{ left: x(k) }} title={`Canvas keyframe at ${fmtClock(k)} · click to go there · drag to move · right-click to delete`}
+        <i key={k} className="kd cvkd" style={{ left: x(k) }} title={`Canvas keyframe at ${fmtClock(k)}`}
           onPointerDown={(e) => {
             if (e.button !== 0) return;
             e.stopPropagation(); e.preventDefault();
@@ -1354,7 +1398,7 @@ function GroupBar({ project, track, x, pps }: { project: Project; track: Track; 
     >
       {!track.open && kids.map((c) => <i key={c.id} className="gmini" style={{ left: (c.start - s0) * pps, width: (c.end - c.start) * pps }} />)}
       <span className="cliphit" title={`${track.name} · ${kids.length} items`} />
-      {keys.map((k) => <i key={k} className={"kd" + (keyAt(keys, t) === k ? " now" : "")} style={{ left: x(k) - x(s0) }} title={`Group keyframe at ${fmtClock(k)} · drag to move · right-click to delete`} onPointerDown={(e) => dragKey(e, k)}
+      {keys.map((k) => <i key={k} className={"kd" + (keyAt(keys, t) === k ? " now" : "")} style={{ left: x(k) - x(s0) }} title={`Group keyframe at ${fmtClock(k)}`} onPointerDown={(e) => dragKey(e, k)}
         onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); askConfirm(e, "Delete this group keyframe?", () => deleteGroupKey(track.id, k)); }} />)}
     </div>
   );
@@ -1606,7 +1650,7 @@ function GraphRow({ item, group, W, x, tOf }: { item: Item; group?: string; W: n
               e.stopPropagation();
               setSegSel((cur) => e.shiftKey || e.ctrlKey || e.metaKey ? (cur.includes(i) ? cur.filter((q) => q !== i) : [...cur, i]) : cur.length === 1 && cur[0] === i ? [] : [i]);
             }}>
-              <title>{`Section ${i + 1}: ${fmtClock(item.start + a.t)} → ${fmtClock(item.start + b.t)} · click to select (Shift adds)`}</title>
+              <title>{`Section ${i + 1}: ${fmtClock(item.start + a.t)} → ${fmtClock(item.start + b.t)}`}</title>
               <path d={segD} fill="none" stroke="transparent" strokeWidth={16} />
               <path className={on ? "segon" : "segoff"} d={segD} fill="none" stroke={on ? "var(--accent)" : PCOL[focus]} strokeWidth={on ? 3 : 1.6} opacity={on ? 1 : 0.4} />
             </g>
@@ -1645,7 +1689,7 @@ function GraphRow({ item, group, W, x, tOf }: { item: Item; group?: string; W: n
                   at = nt;
                 }, () => useStore.getState().setT(item.start + k.t)); // a click jumps the playhead to the keyframe
               }}>
-              <title>{c === "pos" ? `Position key at ${fmtClock(item.start + k.t)} · drag sideways to retime (move the item on the canvas to change where it goes)` : `${chLabel(c)} ${fmtCh(c, k.v)} at ${fmtClock(item.start + k.t)} · drag up/down to change it, sideways to retime`}</title>
+              <title>{c === "pos" ? `Position key at ${fmtClock(item.start + k.t)} ` : `${chLabel(c)} ${fmtCh(c, k.v)} at ${fmtClock(item.start + k.t)} · drag up/down to change it, sideways to retime`}</title>
             </rect>
           );
         }))}

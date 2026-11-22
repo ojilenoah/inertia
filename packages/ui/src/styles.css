@@ -1456,3 +1456,73 @@ body .fbar.under .ib { width: 28px; height: 26px; }
 /* phones: the whole track toolbar sits centred as one row (the play buttons aren't pinned to the middle) */
 .mo.phone .tlbar { display: flex; justify-content: safe center; gap: 4px; }
 .mo.phone .tlbar .tlside.left, .mo.phone .tlbar .tlside.right { justify-content: flex-start; flex: none; }
+/* corner pin: the four corners of the picked item */
+.pinframe { position: absolute; pointer-events: none; transform-style: flat; }
+.pinframe svg { position: absolute; left: 0; top: 0; }
+.pinframe .pinquad { fill: none; stroke: var(--sel); opacity: .55; }
+.pinframe .pinquad.on { opacity: 1; }
+.pinframe .pincorner { pointer-events: auto; cursor: move; touch-action: none; }
+.pinframe .pincorner circle { fill: #fff; stroke: var(--sel); }
+.pinframe .pincorner circle.pinhit { fill: transparent; stroke: none; }
+.pinframe .pincorner:hover circle:not(.pinhit) { fill: var(--accent); }
+.linehint button.ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+/* text change presets: a little live sample on each */
+.mpick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 4px 0 2px; }
+.mpick button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 7px 4px 6px; border-radius: 8px; font: 500 11px var(--sans); color: var(--ink-2); background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line); }
+.mpick button:hover { color: var(--ink); }
+.mpick button.on { color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.mpick .msample { height: 22px; display: flex; align-items: center; justify-content: center; font: 800 17px/1 var(--sans); letter-spacing: -.02em; white-space: pre; color: var(--ink); overflow: visible; }
+/* the hint bar never runs off a narrow screen */
+.linehint { max-width: calc(100vw - 16px); }
+@media (max-width: 520px) { .linehint span { display: none; } }
+.selbox.pinning { outline: none; }
+/* the item menu: actions side by side */
+.cm-tools { display: flex; align-items: center; gap: 1px; padding: 2px 4px 4px; }
+.cm-tools button { flex: 1; height: 30px; min-width: 26px; border-radius: 5px; display: grid; place-items: center; color: var(--ink-2); }
+.cm-tools button:hover { background: var(--panel-3); color: var(--ink); }
+.cm-tools button.on { color: var(--accent); }
+.cm-tools button.danger:hover { color: #d93838; }
+.cm-tools svg.i { width: 15px; height: 15px; }
+.cm-vsep { width: 1px; height: 18px; background: var(--line); margin: 0 3px; flex: none; }
+.cmenu .cm-align { grid-template-columns: repeat(8, 1fr); padding: 0 4px 2px; }
+.cm-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 2px 4px; }
+.cm-pair button { height: 26px; border-radius: 4px; font-size: 12px; color: var(--ink); text-align: left; padding: 0 8px; }
+.cm-pair button:hover { background: var(--panel-3); }
+/* no keyboard on a phone: shortcuts aren't shown */
+.mo.phone .cm-row kbd:not(.cm-keep) { display: none; }
+@media (any-pointer: coarse) { .cm-row kbd:not(.cm-keep) { display: none; } }
+.row .f2.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+/* the edit-mode switch (2D · 3D · pin): upright beside the selected item, the same size at any zoom or scale */
+.selworld .modeknob { position: absolute; width: calc(22px / var(--k)); height: calc(22px / var(--k)); border-radius: 50%; display: grid; place-items: center; pointer-events: auto; background: var(--panel); color: var(--ink); box-shadow: 0 0 0 calc(1px / var(--k)) var(--line-2), 0 calc(6px / var(--k)) calc(16px / var(--k)) rgba(0,0,0,.35); z-index: 2; }
+.selworld .modeknob:hover, .selworld .modeknob.on { background: var(--ink); color: var(--panel); }
+.selworld .modeknob svg.i { width: calc(13px / var(--k)); height: calc(13px / var(--k)); }
+/* popups and cards: a soft rim that shows against what's behind them (light on dark, dark on light) instead of a
+   hard dark line, drawn as a real border so the rounded corners come out smooth over the blurred backdrop */
+.mo { --rim: rgba(0, 0, 0, .14); }
+.mo[data-theme="dark"] { --rim: rgba(255, 255, 255, .13); }
+body :is(.cmenu, .bmenu, .fbar, .pop, .histpop, .gridpop, .shpop, .pmenu, .cbubble, .rmenu, .trpick, .mkpop, .linehint) {
+  border: 1px solid var(--rim, rgba(128, 128, 128, .28));
+  background-clip: padding-box;
+  box-shadow: 0 18px 44px -16px rgba(0, 0, 0, .45);
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+}
+body :is(.cmenu, .pop, .pmenu) svg { shape-rendering: geometricPrecision; }
+.cm-sep, .cm-vsep { background: var(--rim, var(--line)); }
+/* the hand: drag to move around the canvas, + / − to zoom, a mini map of where you are */
+.stagewrap .handpad { position: absolute; inset: 0; z-index: 70; cursor: grab; touch-action: none; }
+.stagewrap .handpad.grabbing { cursor: grabbing; }
+.handctl { position: absolute; right: 10px; bottom: 10px; z-index: 71; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; pointer-events: none; }
+.handctl > * { pointer-events: auto; }
+.handctl .peek { position: relative; overflow: hidden; border-radius: 4px; border: 1px solid var(--rim, rgba(255,255,255,.2)); box-shadow: 0 8px 22px -8px rgba(0,0,0,.6); cursor: pointer; touch-action: none; }
+.handctl .peek i { position: absolute; border-radius: 1px; pointer-events: none; }
+.handctl .peek b { position: absolute; border: 1.5px solid var(--sel); background: color-mix(in srgb, var(--sel) 12%, transparent); border-radius: 2px; pointer-events: none; box-shadow: 0 0 0 999px rgba(0,0,0,.28); }
+.handctl .hzoom { display: flex; align-items: center; gap: 1px; padding: 2px; border-radius: 9px; background: color-mix(in srgb, var(--panel) 82%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 1px solid var(--rim, rgba(255,255,255,.2)); box-shadow: 0 8px 22px -8px rgba(0,0,0,.6); }
+.handctl .hzoom button { height: 28px; min-width: 28px; border-radius: 7px; display: grid; place-items: center; color: var(--ink); }
+.handctl .hzoom button:hover { background: var(--panel-3); }
+.handctl .hzoom .hpct { min-width: 48px; font: 600 11px var(--mono); }
+.mo.phone .handctl { right: 6px; bottom: 6px; }
+.mo.phone .handctl .hzoom button { height: 26px; min-width: 26px; }
+/* picking a mask by pointing at it */
+body.maskpicking .stagewrap, body.maskpicking .lanes, body.maskpicking .clip { cursor: crosshair !important; }
+.cm-pick span { color: var(--accent); }
+.f2w.pickw { grid-template-columns: minmax(0, 1fr) auto; }

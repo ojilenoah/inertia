@@ -33,7 +33,7 @@ export function addParticles(kind: ParticleSpec["kind"]) {
     id: uid("item"), name: kind[0].toUpperCase() + kind.slice(1), kind: "particles", trackId, start, end, w: p.width, h: p.height, fill: "transparent", tint: "--orange", keys: {}, base: base(p),
     particles: { ...PARTICLE_DEFAULTS[kind], colors: [...PARTICLE_DEFAULTS[kind].colors] },
   } as Item));
-  useStore.getState().toast(`${kind[0].toUpperCase() + kind.slice(1)} added · tune it in the Particles card`);
+  useStore.getState().toast(`${kind[0].toUpperCase() + kind.slice(1)} added`);
 }
 
 /* ---------------- drawing ---------------- */
@@ -128,7 +128,7 @@ export async function importSVG() {
   });
   if (ids.length) { useStore.getState().selectMany(ids); }
   else select(null);
-  toast(`${parts.length} shape${parts.length === 1 ? "" : "s"} imported · Ctrl+G groups them`);
+  toast(`${parts.length} shape${parts.length === 1 ? "" : "s"} imported`);
 }
 /** A new track right above another (each SVG part gets its own, later parts in front). */
 function insertAbove(p: Project, trackId: string): string {

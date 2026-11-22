@@ -11,6 +11,9 @@ import type { LineSpec, ShapeSpec } from "@moshion/engine";
 import { ShapeIcon } from "./Shapes";
 import { savePreset } from "./presets";
 import { FX_OPTS, fxOpt, lookAt, setLook, setText, textAt, keyLookAndText } from "@moshion/engine";
+import { TEXT_MORPHS, clearPin, isPinned, morphChars, parentState, pinAt, setPinCorner } from "@moshion/engine";
+import type { TextMorphKind } from "@moshion/engine";
+import { PINNABLE } from "./Viewer";
 import { BLEND_GROUPS, TEXT_ANIM_LABEL, TEXT_LOOP_LABEL, loopLabel, stepLabel, keyTimes, keyAt,
   BG_PRESETS, IN_OUT_LABEL, LOOP_LABEL, NO_LOOK, SCENE_EFFECTS, activeBackground, backgroundCSS, fmtClock, splitBackground, addKey, addTrack, groupOf, hasKeyAt, ownValue, removeKey, sampleKeys, ungroupTrack, uid,
 } from "@moshion/engine";
@@ -20,7 +23,8 @@ import { deleteGroupKey, deleteItemKey } from "./Timeline";
 import { prop } from "./EditTools";
 import { duplicate, layer } from "./CanvasMenu";
 import { pickImageFile } from "./persist";
-import { canCarryText } from "./extras";
+import { canCarryText, canRide, pathTiltOf } from "./extras";
+import { startMaskPick } from "./MaskPick";
 import { atPickedKeys, toggleLock } from "./editing";
 import { scrub } from "./scrub";
 import { importFiles } from "./media";
@@ -364,13 +368,14 @@ function UseAsMask({ item }: { item: Item }) {
   return (
     <>
       <div className="psub">Use as a mask for</div>
-      <Row label="Mask">
-        <select className="psel" value="" onChange={(e) => { if (e.target.value) { use(e.target.value); st().toast(`${item.name} now masks it · settings are on the masked item's (or group's) card`); } }}>
+      <Row label="Mask"><div className="f2w pickw">
+        <select className="psel" value="" onChange={(e) => { if (e.target.value) { use(e.target.value); st().toast(`${item.name} masks it now`); } }}>
           <option value="">Pick a group or item…</option>
           {groups.length > 0 && <optgroup label="Groups">{groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</optgroup>}
           <optgroup label="Items">{items.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}</optgroup>
         </select>
-      </Row>
+        <button className="chip" title="Pick it on the canvas or the tracks" onClick={() => startMaskPick(item.id, "for")}>Pick</button>
+      </div></Row>
       {!groups.length && <p className="hint">No groups yet: select items and press Ctrl+G to make one.</p>}
       {masking.map((m) => <div key={m.id} className="pinrow"><span>Masks {m.name}</span><button className="chip" onClick={() => stop(m.id)}>Stop</button></div>)}
     </>
@@ -427,7 +432,7 @@ function ParentAndLinks({ item }: { item: Item }) {
       <Row label="Parent">
         <select className="psel" value={item.parentLink?.id ?? ""} onChange={(e) => setI((it) => {
           if (!e.target.value) { delete it.parentLink; return; }
-          const par = project.items.find((i) => i.id === e.target.value)!, P = itemState(project, par, t);
+          const par = project.items.find((i) => i.id === e.target.value)!, P = parentState(project, par, t, it);
           it.parentLink = { id: par.id, x0: P.x, y0: P.y, rz0: P.rz, s0: P.scale };
         })}>
           <option value="">Nothing</option>
@@ -539,7 +544,7 @@ function RunAlong({ item }: { item: Item }) {
     }
     if (!tg) { if (old && it.parentLink?.id === old) delete it.parentLink; return; }
     // the shape (or line) becomes its parent; the text's box sits on it so it's easy to find
-    const P = itemState(project, tg, t);
+    const P = parentState(project, tg, t, it);
     if (!it.keys.x?.length) it.base.x = P.x;
     if (!it.keys.y?.length) it.base.y = P.y;
     it.parentLink = { id: tg.id, x0: P.x, y0: P.y, rz0: P.rz, s0: P.scale };
@@ -567,8 +572,14 @@ function RunAlong({ item }: { item: Item }) {
       </Row>
       {(item.onPath || (item.follow && item.follow.letters !== false)) && <>
         <Row label="Along"><Slider value={numAt(item, "pathOffset", local)} min={closed ? -100 : -50} max={100} step={0.5} fmt={(v) => `${Math.round(v)}%`} onChange={(v) => setF((it) => { setNum(it, "pathOffset", st().t, v); }, false)} /></Row>
+        {item.onPath && <Row label="Turn"><Slider value={pathTiltOf(item, local)} min={-180} max={180} step={1} fmt={(v) => `${Math.round(v)}°`}
+          onChange={(v) => setF((it) => {
+            // older "stand up" text: it carries on from standing (90°)
+            if (it.pathText?.stand) { if (it.pathTilt == null && !it.numKeys?.pathTilt?.length) it.pathTilt = 90; it.pathText = { ...it.pathText, stand: undefined }; }
+            setNum(it, "pathTilt", st().t, Math.round(v));
+          }, false)} /></Row>}
         <div className="chips" style={{ margin: "0 0 6px" }}>
-          <button className="chip" title="Keyframe where the text is right now, then open its Along curve in the graph to shape the motion (ease, smooth through, custom handles)" onClick={() => {
+          <button className="chip" title="Keyframe Along here and open its curve" onClick={() => {
             setF((it) => { const ks = ((it.numKeys ??= {}).pathOffset ??= []); const at = st().t - it.start; if (!ks.some((k) => Math.abs(k.t - at) < 1e-3)) { ks.push({ t: at, v: numAt(it, "pathOffset", at), ease: ks[0]?.ease ?? "ease" }); ks.sort((q1, q2) => q1.t - q2.t); } });
             st().setUI({ graph: true, graphProp: "along" });
           }}>◆ Keyframe Along here</button>
@@ -580,14 +591,13 @@ function RunAlong({ item }: { item: Item }) {
           )}
           <Row label="Sits"><Seg value={pt.side ?? "top"} options={closed ? [["top", "Outside"], ["middle", "On the line"], ["under", "Inside"]] : [["top", "On top"], ["middle", "Centred"], ["under", "Under"]]} onChange={(v) => setP((p) => { p.side = v as "top"; })} /></Row>
           <Row label="Runs"><Seg value={pt.flip ? "back" : "fwd"} options={closed ? [["fwd", "Clockwise"], ["back", "Anticlockwise"]] : [["fwd", "Start → end"], ["back", "End → start"]]} onChange={(v) => setP((p) => { p.flip = v === "back"; })} /></Row>
-          {closed && tilted && <>
-            <Row label="Letters"><Seg value={pt.stand ? "stand" : "flat"} options={[["flat", "Lie in the shape"], ["stand", "Stand up"]]} onChange={(v) => setP((p) => { p.stand = v === "stand"; })} /></Row>
+          {item.kind === "text" && (tilted || Math.abs(pathTiltOf(item, local)) > 1) && (
             <Row label="Far side"><Seg value={pt.far ?? "show"} options={[["show", "Show"], ["fade", "Fade"], ["hide", "Hide"]]} onChange={(v) => setP((p) => { p.far = v as "show"; })} /></Row>
-          </>}
+          )}
         </>}
         <p className="hint">{target && target.kind !== "motion"
-          ? `${target.name} is now its parent: the text moves, turns and grows with it. Along and Gap change at keyframes — set them at two keyframes to send the letters round, then shape the Along curve in the graph to make it ease or glide.`
-          : "Along changes at keyframes: set it at two keyframes to slide the letters along the path."}</p>
+          ? `${target.name} is now its parent: this moves, turns and grows with it. Turn hinges it round the edge (0° lies flat in the surface, 90° stands up off it). Along, Turn and Gap change at keyframes.`
+          : "Along and Turn change at keyframes: set Along at two keyframes to slide it along the path."}</p>
       </>}
     </>
   );
@@ -606,7 +616,7 @@ function MaskAndRepeat({ item, only }: { item: Item; only?: "mask" }) {
       {!only && <ParentAndLinks item={item} />}
       {only && <>
       <div className="psub" style={{ marginTop: 0 }}>Mask this item</div>
-      <Row label="Mask with">
+      <Row label="Mask with"><div className="f2w pickw">
         <select className="psel" value={item.mask?.by ?? ""} onChange={(e) => setI((it) => {
           if (!e.target.value) { delete it.mask; return; }
           // a text mask shows this item in its letters, so the text itself is hidden to begin with
@@ -617,7 +627,8 @@ function MaskAndRepeat({ item, only }: { item: Item; only?: "mask" }) {
           {project.items.filter((i) => i.id !== item.id && ["shape", "rect", "ellipse", "star", "image", "video", "glass", "text", "chart", "particles"].includes(i.kind)).map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
           {project.tracks.filter((g) => g.kind === "group" && !itemsInGroup(project, g.id).some((x) => x.id === item.id)).map((g) => <option key={g.id} value={g.id}>{`Group: ${g.name}`}</option>)}
         </select>
-      </Row>
+        <button className="chip" title="Pick it on the canvas or the tracks" onClick={() => startMaskPick(item.id, "with")}>Pick</button>
+      </div></Row>
       {item.mask && <Row label="Clip to">
         <select className="psel" value={item.mask.edge ?? "shape"} onChange={(e) => setI((it) => { it.mask = { ...it.mask!, edge: e.target.value === "shape" ? undefined : e.target.value as NonNullable<Item["mask"]>["edge"] }; })}>
           <option value="shape">Its shape</option>
@@ -633,7 +644,7 @@ function MaskAndRepeat({ item, only }: { item: Item; only?: "mask" }) {
       {item.mask && <Row label="The shape"><Seg value={item.mask.inside ? "show" : "hide"} options={[["show", "Shown"], ["hide", "Hidden"]]} onChange={(v) => setI((it) => { it.mask = { ...it.mask!, inside: v === "show" || undefined }; })} /></Row>}
       {item.mask && <p className="hint">{item.mask.inside ? "The shape shows too. Layers work as usual: put this item above the shape to see it on top." : "The shape itself is hidden; move or animate it to reveal this item."}</p>}
       <UseAsMask item={item} />
-      {item.kind === "text" && <RunAlong item={item} />}
+      {canRide(item) && <RunAlong item={item} />}
       </>}
       {!only && <>
       <div className="psub">Repeater</div>
@@ -783,10 +794,10 @@ export function EditPanel() {
   const graph = useStore((x) => x.ui.graph);
   const ref = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
-  const [animTab, setAnimTab] = useState<"in" | "out" | "loop">("in");
+  const [animTab, setAnimTab] = useState<"in" | "out" | "loop" | "change">("in");
   const [textTab, setTextTab] = useState<"type" | "colour" | "box" | "tricks">("type");
   // Position card: position & size | 3D · Effects card: effects | opacity & blend
-  const [posTab, setPosTab] = useState<"pos" | "3d">("pos");
+  const [posTab, setPosTab] = useState<"pos" | "3d" | "pin">("pos");
   const [fxTab, setFxTab] = useState<"fx" | "blend">("fx");
   // opened straight on the part asked for (the old Rotate and Opacity cards open their tab)
   useEffect(() => {
@@ -838,29 +849,31 @@ export function EditPanel() {
     x = fit(panel ? panel.x - W / 2 : 0, W, innerWidth);
     y = above ? anc.top - 8 - Math.min(h, maxH) : anc.bottom + 8;
   } else if (besideItem && objR) {
-    maxH = innerHeight - 16;
-    const shown = Math.min(h, maxH);
-    // worked out once when the card opens, so it doesn't follow the item around while it plays
+    // right under the item, or right over it when there's more room there (never on top of it); worked out once
+    // when the card opens, so it doesn't follow the item around while it plays
     let f = frozen.current;
     if (!f || f.key !== pkey) {
-      const right = innerWidth - objR.right - 12, left = objR.left - 12;
-      f = frozen.current = {
-        key: pkey, x: right >= W ? objR.right + 12 : left >= W ? objR.left - 12 - W : right >= left ? innerWidth - W - 8 : 8,
-        top: objR.top, bottom: objR.bottom, upper: objR.top + objR.height / 2 < innerHeight / 2,
-      };
+      const sb = document.querySelector(".selbox")?.getBoundingClientRect();
+      const top = Math.min(objR.top, sb && sb.width ? sb.top : Infinity), bottom = Math.max(objR.bottom, sb && sb.width ? sb.bottom : -Infinity);
+      const below = innerHeight - bottom - 18, over = top - 18;
+      f = frozen.current = { key: pkey, x: objR.left + objR.width / 2, top, bottom, upper: !(below >= Math.min(h, 280) || below >= over) };
     }
-    x = f.x;
-    // top-aligned with an item in the upper half of the screen, bottom-aligned with one in the lower half
-    y = fit(f.upper ? f.top : f.bottom - shown, shown, innerHeight);
+    above = f.upper;
+    maxH = Math.max(150, above ? f.top - 18 : innerHeight - f.bottom - 18);
+    const cw = Math.min(W, innerWidth - 16), shown = Math.min(h, maxH);
+    x = fit(f.x - cw / 2, cw, innerWidth);
+    y = above ? Math.max(8, f.top - 10 - shown) : Math.min(f.bottom + 10, innerHeight - 8 - shown);
   } else {
     maxH = innerHeight - 16; x = fit(panel ? panel.x - W / 2 : 0, W, innerWidth); y = fit(panel ? panel.y : 0, Math.min(h, maxH), innerHeight);
   }
   // phones: the card is a sheet over the tracks, right under the video, so the item being edited stays in sight
-  const atMenu = stacked && !drag && !!panel?.fromMenu;
+  // a card about a canvas item is placed by the item (above), on phones too
+  const byItem = !drag && !anc && besideItem;
+  const atMenu = stacked && !drag && !byItem && !!panel?.fromMenu;
   // opened from the floating bar over the item: the card sits right above that bar (below it if there's no room)
   const atBar = stacked && !drag && !atMenu && !!panel?.anchor;
-  const sheet = stacked && !drag && !atMenu && !atBar;
-  let cardW = W;
+  const sheet = stacked && !drag && !atMenu && !atBar && !byItem;
+  let cardW = byItem ? Math.min(W, innerWidth - 16) : W;
   if (atBar && panel?.anchor) {
     const a = panel.anchor, room = a.top - 14;
     cardW = Math.min(W, innerWidth - 16);
@@ -990,16 +1003,27 @@ export function EditPanel() {
         const pct = (v: number) => `${Math.min(100, Math.max(0, (v / life) * 100))}%`;
         return (
           <>
-            <div className="atimeline" title="Where the In and Out play inside the item · on the timeline you can drag them">
+            <div className="atimeline" title="Where In and Out play">
               {A.in && <i className="ain" style={{ left: pct(A.in.at ?? 0), width: pct(A.in.dur) }} />}
               {A.out && <i className="aout" style={{ right: pct(A.out.at ?? 0), width: pct(A.out.dur) }} />}
               <span>{A.in ? `IN ${stepLabel(A.in)}` : ""}</span><span>{A.loop ? `∞ ${loopLabel(A.loop)}` : ""}</span><span>{A.out ? `OUT ${stepLabel(A.out)}` : ""}</span>
             </div>
             <div className="atabs2" role="tablist">
-              {([["in", "In", "As it appears", A.in], ["out", "Out", "As it leaves", A.out], ["loop", "Throughout", "Its whole lifetime", A.loop]] as const).map(([k, l, tip, on]) => (
+              {([["in", "In", "As it appears", A.in], ["out", "Out", "As it leaves", A.out], ["loop", "Throughout", "Its whole lifetime", A.loop], ...(isText ? [["change", "Change", "When its wording changes at a keyframe", item.textMorph]] : [])] as ["in" | "out" | "loop" | "change", string, string, unknown][]).map(([k, l, tip, on]) => (
                 <button key={k} role="tab" className={animTab === k ? "on" : ""} title={tip} onClick={() => setAnimTab(k)}>{l}{on ? <i /> : null}</button>
               ))}
             </div>
+            {animTab === "change" && isText && <>
+            <div className="mpick" role="radiogroup" aria-label="How the text changes">
+              {TEXT_MORPHS.map(([k, l, tip]) => (
+                <button key={k} role="radio" aria-checked={(item.textMorph ?? "smooth") === k} className={(item.textMorph ?? "smooth") === k ? "on" : ""} title={tip}
+                  onClick={() => { setF((it) => { if (k === "smooth") delete it.textMorph; else it.textMorph = k; }); previewMorph(item.id, k); }}>
+                  <MorphSample kind={k} />{l}
+                </button>
+              ))}
+            </div>
+            <p className="hint">{item.textKeys && item.textKeys.length > 1 ? "How the wording changes between this text's keyframes." : "Type different text at two keyframes and it changes from one to the other this way."}</p>
+            </>}
             {animTab === "in" && pick("in")}
             {animTab === "out" && pick("out")}
             {animTab === "loop" && <>
@@ -1055,6 +1079,8 @@ export function EditPanel() {
             {info.params.includes("thickness") && <Row label="Thickness"><Slider value={spec.thickness ?? 0.4} min={0.05} max={0.95} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => setS((s) => { s.thickness = v; }, false)} /></Row>}
             {info.params.includes("round") && <Row label="Roundness"><Slider value={spec.round ?? 0} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => setS((s) => { s.round = v; }, false)} /></Row>}
             {info.params.includes("seed") && <Row label="Variation"><Slider value={spec.seed ?? 1} min={1} max={60} step={1} fmt={(v) => `#${Math.round(v)}`} onChange={(v) => setS((s) => { s.seed = Math.round(v); }, false)} /></Row>}
+            <Row label="Hollow"><Slider value={numAt(item, "hollow", t - item.start)} min={0} max={Math.round(Math.min(item.w, item.h) / 2)} fmt={(v) => (v ? `${Math.round(v)}px rim` : "Solid")} onChange={(v) => setF((it) => { setNum(it, "hollow", st().t, Math.round(v)); }, false)} /></Row>
+            {numAt(item, "hollow", t - item.start) > 0 && <p className="hint">The middle is cut out: a rim this thick is left, with a hole of the same shape. It can change at keyframes.</p>}
             <p className="hint">With keyframes, pick a different shape (or settings) at another keyframe and it morphs between them. Colour and border are in Fill & border.</p>
           </>
         );
@@ -1117,7 +1143,7 @@ export function EditPanel() {
                   // take the motion's keyframes (positions keep following the path)
                   for (const kt of motionTimes(m)) for (const pr of ["x", "y"] as Prop[]) { const ks = (it.keys[pr] ??= []); if (!ks.some((k) => Math.abs(k.t - kt) < 1e-3)) { ks.push({ t: kt, v: it.base[pr], ease: "ease" }); ks.sort((a2, b2) => a2.t - b2.t); } }
                 });
-                if (mid) toast("Linked · it now sits under the motion clip with its keyframes");
+                if (mid) toast("Linked to the motion");
               }}>
                 <option value="">Nothing</option>
                 {motions.map((mm) => <option key={mm.id} value={mm.id}>{mm.name} · {mm.start.toFixed(1)}–{mm.end.toFixed(1)}s</option>)}
@@ -1251,7 +1277,8 @@ export function EditPanel() {
                 <button className="chip" onClick={() => setF((it) => { it.imgX = 0; it.imgY = 0; it.imgZoom = 1; })}>Reset</button>
               </div>
             </>}
-            {["shape", "rect", "ellipse", "star", "image", "video", "glass"].includes(item.kind) && <>
+            {/* shapes have it in the Shape card; pictures, videos and glass keep it here */}
+            {["image", "video", "glass"].includes(item.kind) && <>
               <Row label="Hollow"><Slider value={numAt(item, "hollow", t - item.start)} min={0} max={Math.round(Math.min(item.w, item.h) / 2)} fmt={(v) => (v ? `${Math.round(v)}px rim` : "Solid")} onChange={(v) => setF((it) => { setNum(it, "hollow", st().t, Math.round(v)); }, false)} /></Row>
               {numAt(item, "hollow", t - item.start) > 0 && <p className="hint">The middle is cut out: what's left is a rim this thick, and the hole has the same shape (rounded corners stay rounded). It can change at keyframes.</p>}
             </>}
@@ -1268,8 +1295,8 @@ export function EditPanel() {
         return (
           <>
             <div className="atabs2" role="tablist">
-              {([["pos", "Position & size", "Where it is and how big"], ["3d", "3D", "Turn it in 3D: X, Y and Z"]] as const).map(([k, l, tip]) =>
-                <button key={k} role="tab" className={posTab === k ? "on" : ""} title={tip} onClick={() => setPosTab(k)}>{l}</button>)}
+              {([["pos", "Position & size", "Where it is and how big"], ["3d", "3D", "Turn it in 3D: X, Y and Z"], ...(item && PINNABLE(item) ? [["pin", "Corner pin", "Move each corner on its own: it warps in perspective"]] : [])] as ["pos" | "3d" | "pin", string, string][]).map(([k, l, tip]) =>
+                <button key={k} role="tab" className={posTab === k ? "on" : ""} title={tip} onClick={() => setPosTab(k)}>{l}{k === "pin" && item && isPinned(item) ? <i /> : null}</button>)}
             </div>
             {posTab === "pos" && <>
             {item?.kind !== "motion" && <Row label="Position" kf={kf(["x", "y", "z"])}>{nums([["x", "X"], ["y", "Y"], ["z", "Z"]], 1)}</Row>}
@@ -1284,6 +1311,23 @@ export function EditPanel() {
               <button className="chip" onClick={() => { st().checkpoint(); P("x").set(project.width / 2); P("y").set(project.height / 2); }}>Center on canvas</button>
             </div>}
             </>}
+            {posTab === "pin" && item && PINNABLE(item) && (() => {
+              const off = pinAt(item, t - item.start) ?? [[0, 0], [0, 0], [0, 0], [0, 0]];
+              const pinned = st().ui.pinning === item.id;
+              return <>
+                {(["Top left", "Top right", "Bottom right", "Bottom left"] as const).map((lab, i) => (
+                  <Row key={lab} label={lab}><div className="f2 even">
+                    <Num label="X" value={Math.round(off[i][0] * 10) / 10} onChange={(v) => setF((it) => { setPinCorner(it, st().t, i, [v, off[i][1]]); }, false)} />
+                    <Num label="Y" value={Math.round(off[i][1] * 10) / 10} onChange={(v) => setF((it) => { setPinCorner(it, st().t, i, [off[i][0], v]); }, false)} />
+                  </div></Row>
+                ))}
+                <div className="chips" style={{ marginTop: 6 }}>
+                  <button className={"chip" + (pinned ? " on" : "")} onClick={() => setUI(pinned ? { pinning: null } : { pinning: item.id, mode3d: false, panel: null })}>{pinned ? "Done on canvas" : "Drag the corners on the canvas"}</button>
+                  {isPinned(item) && <button className="chip" onClick={() => setF((it) => { clearPin(it); })}>Reset</button>}
+                </div>
+                <p className="hint">How far each corner has moved (px). With keyframes, the corners animate.</p>
+              </>;
+            })()}
             {posTab === "3d" && <>
             {/* the same gimbal as on the canvas: drag the ball to tumble, the ring to spin, click an axis to face it */}
             {(item || group) && <RotationGimbal inline itemId={item ? item.id : null} trackId={group?.id} s={item ? itemState(project, item, t) : groupValues(group!, t)} onExit={() => {}} />}
@@ -1411,7 +1455,7 @@ export function EditPanel() {
                 const at = beats.map((b) => item.start + (b - off) / sp).filter((x) => x >= item.start && x <= item.start + len);
                 if (!at.length) { toast("No clear beats found in this clip"); return; }
                 edit((d) => { d.markers = [...(d.markers ?? []).filter((m) => m.label !== "beat"), ...at.map((x) => ({ id: uid("mk"), t: Math.round(x * 1000) / 1000, label: "beat" }))]; });
-                toast(`${at.length} beat markers added · cuts and keyframes snap to them`);
+                toast(`${at.length} beat markers added`);
               }}>Find beats</button>
               <button className="chip" onClick={() => edit((d) => { d.markers = (d.markers ?? []).filter((m) => m.label !== "beat"); })}>Clear beats</button>
             </div>
@@ -1434,7 +1478,7 @@ export function EditPanel() {
             </div>
             <div className="chips" style={{ marginTop: 6 }}>
               <button className="chip" onClick={() => duplicate(id)}>Duplicate</button>
-              <button className="chip" title="Save this item (style, animation, effects) to reuse it from Media › Presets" onClick={() => savePreset(item)}>Save as preset</button>
+              <button className="chip" title="Save as a preset" onClick={() => savePreset(item)}>Save as preset</button>
               <button className="chip danger" onClick={() => { edit((d) => { d.items = d.items.filter((q) => q.id !== id); }); select(null); setUI({ panel: null }); toast(`${item.name} deleted · Ctrl+Z brings it back`); }}>Delete</button>
             </div>
           </>
@@ -1626,7 +1670,7 @@ function SceneBody({ bgId }: { bgId?: string }) {
       <div className="psub" style={{ marginTop: 0 }}>Canvas</div>
       <Row label="Keyframes">
         <span style={{ display: "flex", gap: 4 }}>
-          <button className="chip" title="Add a canvas keyframe at the playhead: look and effect amounts can change between keyframes" onClick={() => edit((d) => addCanvasKey(d, st().t))}>◆+ Here</button>
+          <button className="chip" title="Add a canvas keyframe" onClick={() => edit((d) => addCanvasKey(d, st().t))}>◆+ Here</button>
           {(project.canvasKeys ?? []).some((k) => Math.abs(k - t) <= 0.02) && <button className="chip" onClick={() => edit((d) => removeCanvasKey(d, st().t))}>◆− Here</button>}
           <span className="hint" style={{ margin: 0 }}>{(project.canvasKeys ?? []).length} keyframe{(project.canvasKeys ?? []).length === 1 ? "" : "s"}</span>
         </span>
@@ -1695,7 +1739,7 @@ function SceneBody({ bgId }: { bgId?: string }) {
         {(bg.kind === "linear" || bg.kind === "conic") && <Row label="Angle"><Slider value={bgNow!.angle} min={0} max={360} fmt={(v) => `${Math.round(v)}°`} onChange={(v) => setLook((b) => { b.angle = v; }, false)} /></Row>}
         {bg.kind !== "solid" && bg.kind !== "video" && <Row label="Movement"><Slider value={bgNow!.speed} min={0} max={3} step={0.05} fmt={(v) => (v ? `${v.toFixed(2)}×` : "still")} onChange={(v) => setLook((b) => { b.speed = v; }, false)} /></Row>}
         <div className="chips" style={{ marginTop: 4 }}>
-          <button className="chip on" title="Cut this background at the playhead so the next part can look different"
+          <button className="chip on" title="Cut the background here"
             onClick={() => { let ok = false; checkpoint(); edit((d) => { ok = splitBackground(d, st().t, uid("bg")); }, false); toast(ok ? `Background cut at ${fmtClock(st().t)} · pick a new look for the next part` : "Move the playhead inside this background to cut it"); if (ok) setUI({ panel: { ...st().ui.panel!, bgId: undefined } }); }}>
             Cut at playhead
           </button>
@@ -1737,3 +1781,41 @@ function SceneBody({ bgId }: { bgId?: string }) {
 }
 
 export { sampleKeys };
+
+/** A tiny looping sample of a text change ("Ab" → "Cd"), drawn the same way the canvas does it. */
+function MorphSample({ kind }: { kind: TextMorphKind }) {
+  const [u, setU] = useState(0);
+  useEffect(() => {
+    let raf = 0; const t0 = performance.now();
+    const tick = (n: number) => { const x = ((n - t0) / 1000) % 2.4; setU(x < 0.4 ? 0 : x < 1.2 ? (x - 0.4) / 0.8 : x < 1.6 ? 1 : 1 - (x - 1.6) / 0.8); raf = requestAnimationFrame(tick); };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  const chars = u <= 0 ? null : u >= 1 ? null : morphChars("Hi", "Yo", u, kind);
+  return (
+    <span className="msample" aria-hidden="true">
+      {chars ? chars.map((c, i) => {
+        if (c.kind === "keep") return c.ch;
+        const w = c.w ?? c.f, op = c.op ?? c.f, sc = c.sc ?? 1;
+        return <span key={i} style={{ display: "inline-block", whiteSpace: "pre", opacity: op, maxWidth: `${w * 1.2}em`, verticalAlign: "top",
+          transform: `translateY(${c.dy ?? 0}em) scale(${sc}, ${sc * (c.sy ?? 1)})`, filter: c.blur ? `blur(${c.blur.toFixed(3)}em)` : undefined }}>{c.ch}</span>;
+      }) : u >= 1 ? "Yo" : "Hi"}
+    </span>
+  );
+}
+/** After picking a text change: play the item's first change on the canvas once, so it can be seen. */
+function previewMorph(itemId: string, _k: TextMorphKind) {
+  const s = useStore.getState(), it = s.project.items.find((q) => q.id === itemId);
+  const ks = it?.textKeys;
+  if (!it || !ks || ks.length < 2 || s.playing) return;
+  const i = ks.findIndex((q, j) => j > 0 && q.text !== ks[j - 1].text);
+  if (i < 1) return;
+  const a = it.start + ks[i - 1].t, b = it.start + ks[i].t, back = s.t, t0 = performance.now(), dur = (b - a) * 1000;
+  const tick = (n: number) => {
+    const x = (n - t0) / dur;
+    if (x >= 1.35) { useStore.getState().setT(back); return; }
+    useStore.getState().setT(a + (b - a) * Math.min(1, x));
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}

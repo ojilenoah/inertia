@@ -87,6 +87,12 @@ export interface UIState {
   pathSel?: { motionId: string; node?: number; seg?: number; whole?: boolean } | null;
   /** Line tool: drawing a straight line or a freehand one. */
   lineTool: "line" | "pen" | null;
+  /** Corner pin: the item whose corners are being dragged. */
+  pinning?: string | null;
+  /** Hand: the canvas only moves and zooms (dragging pans it, nothing gets picked). */
+  hand?: boolean;
+  /** Picking a mask by pointing at it ("with": it masks this item; "for": this item masks it); onion: how onion skin was before. */
+  pickMask?: { itemId: string; mode: "with" | "for"; onion: boolean } | null;
   modal: { section: Section; itemId: string | null; trackId?: string; x: number; y: number } | null;
   toast: string | null;
 }

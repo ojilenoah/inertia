@@ -82,7 +82,7 @@ export function PhoneMenu() {
             <button className="pmitem pmexport" onClick={() => { close(); setUI({ exporting: true }); }}><Icon name="export" />Export</button>
             <div className="pmrow"><em>Canvas</em>
               <span className="pmtools">
-                <button className={"ib" + (ui.onion ? " on" : "")} title="Onion skin: the selected item faintly at its previous and next keyframes" aria-label="Onion skin" onClick={() => setUI({ onion: !ui.onion })}><Icon name="frame" /></button>
+                <button className={"ib" + (ui.onion ? " on" : "")} title="Onion skin" aria-label="Onion skin" onClick={() => setUI({ onion: !ui.onion })}><Icon name="frame" /></button>
                 <GridButton />
                 <button className={"ib" + (ui.orbit ? " on" : "")} title="3D orbit view" aria-label="3D orbit view" onClick={() => setUI({ orbit: !ui.orbit })}><Icon name="cube" /></button>
               </span>
@@ -162,6 +162,16 @@ export function PlayerBar() {
 }
 
 /** Loop: the selected item (or the range set with I / O) plays over and over (L). */
+/** Select or hand: with the hand, the canvas only moves and zooms (drag to move around, scroll or pinch to zoom). */
+function SelectHand() {
+  const hand = useStore((s) => !!s.ui.hand);
+  const set = (on: boolean) => useStore.getState().setUI({ hand: on, ...(on ? { pinning: null, ctx: null } : {}) });
+  return <>
+    <button className={"ib" + (hand ? "" : " on")} title="Select (V)" aria-label="Select" onClick={() => set(false)}><Icon name="cursor" /></button>
+    <button className={"ib" + (hand ? " on" : "")} title="Hand (H): move and zoom the canvas" aria-label="Hand" onClick={() => set(!hand)}><Icon name="hand" /></button>
+  </>;
+}
+
 export function LoopButton() {
   const ui = useStore((s) => s.ui);
   return (
@@ -249,16 +259,16 @@ export function Rail() {
     <nav className="card rail" aria-label="Tools">
       {/* phones: the menu, History and the held keys are on the right sidebar */}
       {touch && !stacked && <><TouchMods /><hr /></>}
-      <button className="ib on" title="Select (V)" aria-label="Select"><Icon name="cursor" /></button>
+      <SelectHand />
       <hr />
       <ShapePicker />
-      <button className="ib" title="Line: adds a line to the canvas · drag its nodes, + adds more, tap a piece to bend it" aria-label="Add a line" onClick={() => addLine()}><Icon name="line" /></button>
+      <button className="ib" title="Line" aria-label="Add a line" onClick={() => addLine()}><Icon name="line" /></button>
       <button className={"ib" + (lineTool === "pen" ? " on" : "")} title="Pen: draw a freehand line" aria-label="Draw freehand" onClick={() => useStore.getState().setUI({ lineTool: lineTool === "pen" ? null : "pen" })}><Icon name="pen" /></button>
       {tools.map(([k, ic, label]) => (
         <button key={k} className="ib" title={`Add ${label}`} aria-label={`Add ${label}`} onClick={() => addItem(SHAPES[k])}><Icon name={ic} /></button>
       ))}
-      <button className="ib" title="Motion path: an invisible clip you draw a path for, then link objects to it" aria-label="Add motion path" onClick={() => addMotion()}><Icon name="motion" /></button>
-      <button className="ib" title="Camera: pan, zoom and turn the whole view with keyframes (select it to adjust its frame)" aria-label="Add camera" onClick={() => addCamera()}><Icon name="camera" /></button>
+      <button className="ib" title="Motion path" aria-label="Add motion path" onClick={() => addMotion()}><Icon name="motion" /></button>
+      <button className="ib" title="Camera" aria-label="Add camera" onClick={() => addCamera()}><Icon name="camera" /></button>
       <hr />
       {(!wide || stacked) && <button className={"ib" + (assetsOn ? " on" : "")} title="Media: imported pictures, videos and audio" aria-label="Media" onClick={() => useStore.getState().setUI({ assets: !assetsOn })}><Icon name="image" /></button>}
       <button className="ib" title="Import pictures, videos or audio" aria-label="Import media" onClick={async () => {

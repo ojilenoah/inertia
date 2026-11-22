@@ -38,7 +38,7 @@ export function usePresets() {
 export function savePreset(item: Item) {
   const copy: Item = JSON.parse(JSON.stringify(item));
   store([{ id: uid("preset"), name: item.name, item: copy, savedAt: Date.now() }, ...list]);
-  useStore.getState().toast(`“${item.name}” saved as a preset · find it in Media › Presets`);
+  useStore.getState().toast("Saved as a preset");
 }
 export function deletePreset(id: string) { store(list.filter((p) => p.id !== id)); }
 

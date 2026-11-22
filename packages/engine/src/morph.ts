@@ -35,10 +35,38 @@ export function lookAt(item: Item, local: Seconds): Look {
 }
 
 /* ---------------- text that changes over time ---------------- */
-export interface MorphChar { ch: string; f: number; kind: "keep" | "del" | "add" }
+/**
+ * One letter while the text changes. `f`: how present it is (0..1). The rest is how it's drawn right now:
+ * op opacity, w share of its width in the line, dy shift (em, down is +), sc size, sy extra vertical squash
+ * (flips), blur (em). `ch` can be a stand-in letter for a moment (scramble).
+ */
+export interface MorphChar { ch: string; f: number; kind: "keep" | "del" | "add"; op?: number; w?: number; dy?: number; sc?: number; sy?: number; blur?: number }
 
-/** Characters of `from` → `to` lined up (longest common subsequence), each with how present it is at progress p. */
-export function morphChars(from: string, to: string, p: number): MorphChar[] {
+/** The ways text can change between two text keyframes. */
+export type TextMorphKind = "smooth" | "slide" | "wave" | "drop" | "flip" | "blur" | "pop" | "scramble" | "retype";
+export const TEXT_MORPHS: [TextMorphKind, string, string][] = [
+  ["smooth", "Smooth", "Old letters fade and close up, new ones grow in"],
+  ["slide", "Slide", "Old letters slide up and out, new ones slide up into place"],
+  ["wave", "Wave", "Letters change one after another, sliding in a wave"],
+  ["drop", "Drop", "Old letters fall away, new ones drop in with a bounce"],
+  ["flip", "Flip", "Each letter flips over like a departures board"],
+  ["blur", "Blur", "Old letters blur away while new ones come into focus"],
+  ["pop", "Pop", "New letters pop in with a little overshoot"],
+  ["scramble", "Scramble", "Changing letters shuffle through random ones before they settle"],
+  ["retype", "Retype", "The old letters are deleted one by one, then the new ones are typed"],
+];
+
+const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
+const easeIO = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const backOut = (x: number) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+const GLYPHS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghkmnpqrstuvwxyz0123456789#%&@$";
+const glyph = (i: number, frame: number) => GLYPHS[Math.floor(Math.abs(Math.sin((i + 1) * 78.233 + frame * 12.9898) * 43758.5453) % GLYPHS.length)];
+
+/**
+ * Characters of `from` → `to` lined up (longest common subsequence: letters both share stay put), each with how
+ * it looks at progress `u` (0..1, not eased) for the chosen kind of change.
+ */
+export function morphChars(from: string, to: string, u: number, kind: TextMorphKind = "smooth"): MorphChar[] {
   const a = [...from], b = [...to];
   const n = a.length, m = b.length;
   const L: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
@@ -47,14 +75,71 @@ export function morphChars(from: string, to: string, p: number): MorphChar[] {
   let i = 0, j = 0;
   while (i < n || j < m) {
     if (i < n && j < m && a[i] === b[j]) { out.push({ ch: a[i], f: 1, kind: "keep" }); i++; j++; }
-    else if (j < m && (i >= n || L[i][j + 1] >= L[i + 1][j])) { out.push({ ch: b[j], f: p, kind: "add" }); j++; }
-    else { out.push({ ch: a[i], f: 1 - p, kind: "del" }); i++; }
+    // where both work, the old letter leaves before the new one comes (reads better, and retypes naturally)
+    else if (i < n && (j >= m || L[i + 1][j] >= L[i][j + 1])) { out.push({ ch: a[i], f: 1, kind: "del" }); i++; }
+    else { out.push({ ch: b[j], f: 0, kind: "add" }); j++; }
+  }
+  const changed = out.filter((c) => c.kind !== "keep");
+  const N = changed.length, D = changed.filter((c) => c.kind === "del").length, A = N - D;
+  const frame = Math.floor(u * 40);
+  let ci = 0, di = 0, ai = 0;
+  // retype: deleting takes the first part, typing the rest
+  const split = D && A ? 0.45 : D ? 1 : 0;
+  for (const c of out) {
+    if (c.kind === "keep") continue;
+    const del = c.kind === "del", idx = ci++;
+    // each letter's own progress: all together, or one after another (wave)
+    const p = kind === "wave" ? clamp01((u - (idx / Math.max(1, N)) * 0.55) / 0.45) : u;
+    const e = easeIO(p), pres = del ? 1 - e : e; // how present it is
+    c.f = pres;
+    switch (kind) {
+      case "slide": case "wave": {
+        const dist = kind === "wave" ? 0.55 : 0.7;
+        Object.assign(c, { op: pres, w: pres, dy: (1 - pres) * (del ? -dist : dist) });
+        break;
+      }
+      case "drop":
+        if (del) Object.assign(c, { op: pres, w: pres, dy: (1 - pres) * 0.9 });
+        else { const bo = backOut(clamp01(p)); Object.assign(c, { op: clamp01(p * 2.5), w: e, dy: -(1 - bo) * 0.9 }); }
+        break;
+      case "flip": {
+        // the old letter folds shut in the first half, the new one opens in the second
+        const sy = del ? clamp01(1 - 2 * e) : clamp01(2 * e - 1);
+        Object.assign(c, { op: sy > 0.001 ? 1 : 0, w: pres, sy, dy: (1 - sy) * (del ? 0.04 : -0.04) });
+        break;
+      }
+      case "blur":
+        Object.assign(c, { op: pres, w: pres, blur: (1 - pres) * 0.35, sc: 1 + (1 - pres) * 0.18 });
+        break;
+      case "pop":
+        if (del) Object.assign(c, { op: pres, w: pres, sc: 0.3 + 0.7 * pres });
+        else Object.assign(c, { op: clamp01(p * 3), w: e, sc: Math.max(0, backOut(clamp01(p))) });
+        break;
+      case "scramble": {
+        const settled = del ? false : p >= 0.8;
+        if (!settled && pres > 0.02) c.ch = /\s/.test(c.ch) ? c.ch : glyph(idx, frame);
+        Object.assign(c, { op: del ? clamp01(pres * 1.4) : clamp01(p * 3), w: pres });
+        break;
+      }
+      case "retype": {
+        // deletes from the last changed letter back, then types the new ones in order
+        let on: boolean;
+        if (del) { const k = di++; on = u < split * ((D - k) / D); }
+        else { const k = ai++; on = u >= split + (1 - split) * ((k + 0.5) / A); }
+        c.f = on ? 1 : 0;
+        Object.assign(c, { op: on ? 1 : 0, w: on ? 1 : 0 });
+        break;
+      }
+      default: // smooth
+        Object.assign(c, { op: pres, w: pres, dy: (1 - pres) * (del ? -0.25 : 0.25), sc: 0.6 + 0.4 * pres });
+    }
   }
   return out;
 }
 
 /** The text at item-local time: a plain string, or a morph between two text keyframes. */
-export function textAt(item: Item, local: Seconds): { text: string; morph?: MorphChar[] } {
+/** The text at item-local time; while it changes between two text keyframes, its letters (`morph`), the two texts and how far along (0..1). */
+export function textAt(item: Item, local: Seconds): { text: string; morph?: MorphChar[]; from?: string; to?: string; u?: number } {
   const ks = item.textKeys;
   if (!ks?.length) return { text: item.text ?? "" };
   if (local <= ks[0].t) return { text: ks[0].text };
@@ -64,10 +149,10 @@ export function textAt(item: Item, local: Seconds): { text: string; morph?: Morp
   while (i < ks.length - 2 && local >= ks[i + 1].t) i++;
   const a = ks[i], b = ks[i + 1];
   if (a.text === b.text) return { text: a.text };
-  const p = easeFn("ease")((local - a.t) / (b.t - a.t || 1e-9));
-  if (p <= 0) return { text: a.text };
-  if (p >= 1) return { text: b.text };
-  return { text: p < 0.5 ? a.text : b.text, morph: morphChars(a.text, b.text, p) };
+  const u = (local - a.t) / (b.t - a.t || 1e-9);
+  if (u <= 0) return { text: a.text };
+  if (u >= 1) return { text: b.text };
+  return { text: u < 0.5 ? a.text : b.text, morph: morphChars(a.text, b.text, u, item.textMorph ?? "smooth"), from: a.text, to: b.text, u };
 }
 
 /* ---------------- editing with the keyframe rule ---------------- */
@@ -251,9 +336,10 @@ export function setShape(item: Item, t: Seconds, spec: ShapeSpec, snapS = 0.02) 
 }
 
 /* ---------------- numbers and colours that change at keyframes ---------------- */
-export type NumKey = "fontSize" | "letterSpacing" | "radius" | "pathOffset" | "pathGap" | "hollow" | "turn" | "volume";
+export type NumKey = "fontSize" | "letterSpacing" | "radius" | "pathOffset" | "pathGap" | "pathTilt" | "hollow" | "turn" | "volume" | import("./pin").PinKey;
 export type ColorKey = "color" | "fill" | "stroke";
-const NUM_DEFAULT: Record<NumKey, number> = { fontSize: 100, letterSpacing: -0.04, radius: 0, pathOffset: 0, pathGap: 0, hollow: 0, turn: 0, volume: 1 };
+const NUM_DEFAULT: Record<NumKey, number> = { fontSize: 100, letterSpacing: -0.04, radius: 0, pathOffset: 0, pathGap: 0, pathTilt: 0, hollow: 0, turn: 0, volume: 1,
+  pin0x: 0, pin0y: 0, pin1x: 0, pin1y: 0, pin2x: 0, pin2y: 0, pin3x: 0, pin3y: 0 };
 const numBase = (item: Item, k: NumKey) => ((item as unknown as Record<string, number | undefined>)[k] ?? NUM_DEFAULT[k]);
 export function numAt(item: Item, k: NumKey, local: Seconds): number { return sample(item.numKeys?.[k], local, numBase(item, k)); }
 
@@ -391,7 +477,7 @@ export function stackAt(project: import("./types").Project, t: Seconds, items: I
 /* ---------------- text tricks ---------------- */
 const SCRAMBLE = "ABCDEFGHJKLMNPQRSTUVWXYZ0123456789#%&*@$";
 /** The text as shown at local time: its keyframed text with any trick applied (counter, scramble, cursor). */
-export function textShown(item: Item, local: Seconds): { text: string; morph?: MorphChar[] } {
+export function textShown(item: Item, local: Seconds): { text: string; morph?: MorphChar[]; from?: string; to?: string; u?: number } {
   const base = textAt(item, local), f = item.textFx;
   if (!f || base.morph) return base;
   const life = Math.max(0.01, item.end - item.start);

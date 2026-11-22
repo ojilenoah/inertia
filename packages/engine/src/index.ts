@@ -10,6 +10,7 @@ export * from "./background";
 export * from "./textanim";
 export * from "./morph";
 export * from "./motion";
+export * from "./pin";
 export * from "./shapes";
 export * from "./itemfx";
 export * from "./scene";

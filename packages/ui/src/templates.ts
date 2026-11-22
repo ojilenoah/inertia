@@ -60,5 +60,5 @@ export function addTemplate(id: string) {
     p.items.push(...items);
   });
   selectMany(items.map((i) => i.id));
-  toast(`${TEMPLATES.find((x) => x.id === id)?.label} added · everything in it can be changed`);
+  toast(`${TEMPLATES.find((x) => x.id === id)?.label} added`);
 }

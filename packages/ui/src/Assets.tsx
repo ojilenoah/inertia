@@ -18,7 +18,7 @@ function Tile({ a }: { a: Asset }) {
   const vref = useRef<HTMLVideoElement>(null);
   return (
     <div
-      className="atile" draggable title={`${a.name} · click to add at the playhead, or drag it onto the canvas or a track`}
+      className="atile" draggable title={`${a.name} · click or drag to add`}
       onDragStart={(e) => { e.dataTransfer.setData("moshion/asset", a.id); e.dataTransfer.effectAllowed = "copy"; }}
       onClick={() => placeAsset(a)}
       onPointerEnter={() => vref.current?.play().catch(() => {})}

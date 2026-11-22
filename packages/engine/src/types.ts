@@ -151,6 +151,8 @@ export interface Item {
    * instead of lying flat in it. far: letters on the far side. (Where along it, and the gap: keyframed numbers.)
    */
   pathText?: { side?: "top" | "middle" | "under"; flip?: boolean; stand?: boolean; far?: "show" | "fade" | "hide"; edge?: "outer" | "inner" };
+  /** On a path: how far it's turned round the edge (degrees: 0 lies in the surface, 90 stands up off it). Keyframed in numKeys. */
+  pathTilt?: number;
   /** A path made with this version: its rx/ry/rz/scale are the path's own turn, tilt and size (node turns live in numKeys.turn). */
   pathV2?: boolean;
   /** A path's turning point (set once it's turned, tilted or sized, so editing its nodes doesn't shift it). */
@@ -181,6 +183,10 @@ export interface Item {
   lookKeys?: Partial<Record<keyof Look, Keyframe[]>>;
   /** Text keyframes: the wording changes between them (letters fade out / in). */
   textKeys?: { t: Seconds; text: string }[];
+  /** How the text changes from one text keyframe to the next (default: smooth). */
+  textMorph?: import("./morph").TextMorphKind;
+  /** Corner pin: each corner's offset (px, in the item's own frame) — the item warps in perspective to fit. Keyframed in numKeys. */
+  pin0x?: number; pin0y?: number; pin1x?: number; pin1y?: number; pin2x?: number; pin2y?: number; pin3x?: number; pin3y?: number;
   /** Glass/effect shapes. */
   effect?: { kind: "liquid-glass" | "frost"; magnify: number; blur: number };
   /** Preset animations layered on top of keyframes: entering, leaving, and for the whole life of the item. */

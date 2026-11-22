@@ -88,7 +88,7 @@ export function addLine() {
   });
   pendingPick.id = id; pendingPick.node = 0;
   select(id); useStore.getState().setUI({ lineTool: null });
-  useStore.getState().toast("Line added · drag the node to place it · + adds the next nodes (drag to curve) · hold to stop");
+  useStore.getState().toast("Line added");
 }
 
 export function LineDrawLayer({ k, stage }: { k: number; stage: React.RefObject<HTMLDivElement | null> }) {
@@ -126,7 +126,7 @@ export function LineDrawLayer({ k, stage }: { k: number; stage: React.RefObject<
         base: { x: Math.round(cx), y: Math.round(cy), z: 0, rx: 0, ry: 0, rz: 0, scale: 1, opacity: 1 } });
     });
     select(id); setUI({ lineTool: null });
-    useStore.getState().toast("Line added · style it in its Line card (dashes, arrows, draw on)");
+    useStore.getState().toast("Line added");
   };
   return (
     <>

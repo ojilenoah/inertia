@@ -11,6 +11,9 @@ import { subLine } from "@moshion/engine";
 import { arrowHeads, dashArray, fxOpt, hexA, lineShape, setText } from "@moshion/engine";
 import type { SceneEffect } from "@moshion/engine";
 import type { MorphChar } from "@moshion/engine";
+import { isPinned, pinCSS, pinHAt } from "@moshion/engine";
+import { PinEditor } from "./PinEdit";
+import { measurer, morphLayout } from "./textmorph";
 import { groupOf, groupValues, itemState, itemsInGroup, ownValue, pieceFx, setValue, splitPieces, textAnimOf, textUnit } from "@moshion/engine";
 import { prop } from "./EditTools";
 import { useStore } from "./store";
@@ -24,6 +27,7 @@ import { MotionOverlay, PathDrawLayer, shownMotion } from "./MotionPath";
 import { LineDrawLayer } from "./Shapes";
 import { LineEditor } from "./LineEdit";
 import { hollowParts, itemShapeD } from "./shapeMorph";
+import { pathPlace, placeCss } from "./extras";
 import { depthStep, itemOutline, lookShadows, maskClipPath, maskFollowers, maskItems, maskOf, mul6, pathGlyphs, pathOffsetAt, repeatCopies, textLetters, textMaskOf, toItemBox, worldToItem, type Glyph } from "./extras";
 
 function VideoFace({ item }: { item: Item }) {
@@ -86,6 +90,23 @@ function hollowMaskCss(outer: { d: string; evenodd?: boolean }, inner: { d: stri
 }
 const STAR_PTS = [[50, 0], [61, 35], [98, 35], [68, 57], [79, 91], [50, 70], [21, 91], [32, 57], [2, 35], [39, 35]];
 const starD = (w: number, h: number) => STAR_PTS.map(([x, y], i) => `${i ? "L" : "M"}${(x * w) / 100} ${(y * h) / 100}`).join("") + "Z";
+
+/** Where a point of an item (u, v from its centre, in its own px) shows on the canvas: its turn, 3D tilt and scale. */
+function screenPoint(s: ItemState, u: number, v: number): [number, number] {
+  const r = Math.PI / 180;
+  let x = u * s.scale, y = v * s.scale, z = 0;
+  let c = Math.cos(s.rz * r), n = Math.sin(s.rz * r);
+  [x, y] = [x * c - y * n, x * n + y * c];
+  c = Math.cos(s.ry * r); n = Math.sin(s.ry * r);
+  [x, z] = [x * c + z * n, -x * n + z * c];
+  c = Math.cos(s.rx * r); n = Math.sin(s.rx * r);
+  [y, z] = [y * c - z * n, y * n + z * c];
+  const f = 1400 / Math.max(1, 1400 - (z + s.z));
+  return [s.x + x * f, s.y + y * f];
+}
+
+/** Items that can be corner-pinned (lines and paths have their own points; sound and the camera aren't drawn). */
+export const PINNABLE = (it: Item) => !["line", "motion", "audio", "camera", "glass"].includes(it.kind);
 
 /** Not turned in 3D: drawn as a plain 2D layer, which the browser redraws sharp at any size. */
 const isFlat = (s: ItemState) => Math.abs(s.rx % 360) < 0.01 && Math.abs(s.ry % 360) < 0.01 && Math.abs(s.z) < 0.01;
@@ -160,7 +181,14 @@ let hitCtx: CanvasRenderingContext2D | null = null;
 function onPathBox(_p: Project, it: Item, s: ItemState, g: { center: { x: number; y: number; angle: number } } | null): ItemState {
   return g && it.onPath ? { ...s, x: g.center.x, y: g.center.y, rz: g.center.angle, rx: 0, ry: 0, z: 0 } : s;
 }
-const appSans = () => (sansStack ||= getComputedStyle(document.documentElement).getPropertyValue("--sans").trim() || "sans-serif");
+/** The app's text font stack (it's set on the app's root element, the same one the canvas text uses). */
+const appSans = () => {
+  if (sansStack) return sansStack;
+  const mo = document.querySelector(".mo");
+  const v = (mo ? getComputedStyle(mo).getPropertyValue("--sans") : "").trim();
+  if (v) sansStack = v; // only remembered once found
+  return v || "sans-serif";
+};
 
 /** Text where some letters have their own colour. */
 function ColoredText({ text, colors }: { text: string; colors: Map<number, string> }) {
@@ -221,12 +249,31 @@ function AnimatedText({ item, text, local, colors, fill }: { item: Item; text: s
     : <span key={"w" + wi} style={{ display: "inline-block", whiteSpace: "nowrap" }}>{[...w].map((ch) => one({ text: ch, anim: true }, k++))}</span>)}</>;
 }
 
-/** Text changing between two text keyframes: letters that go fade and close up, new ones grow in. */
-function MorphText({ chars }: { chars: MorphChar[] }) {
-  return <>{chars.map((c, i) => c.kind === "keep" || c.ch === "\n"
-    ? (c.kind === "keep" || c.f > 0.5 ? c.ch : "")
-    : <span key={i} style={{ display: "inline-block", whiteSpace: "pre", opacity: c.f, maxWidth: `${c.f * 1.2}em`, verticalAlign: "top",
-        transform: `translateY(${(1 - c.f) * (c.kind === "del" ? -0.25 : 0.25)}em) scale(${0.6 + 0.4 * c.f})` }}>{c.ch}</span>)}</>;
+/**
+ * Text changing between two text keyframes, in place: shared letters slide from their old spot to their new one, the
+ * others leave or arrive where they stand (in the chosen kind of change), and the text never spreads sideways.
+ */
+function MorphText({ item, tx }: { item: Item; tx: { morph?: MorphChar[]; from?: string; to?: string; u?: number } }) {
+  const size = item.fontSize ?? 100, lh = size * (item.lineHeight ?? 0.9), pad = item.textBg ? item.textPad ?? 24 : 0;
+  const font = `${item.italic ? "italic " : ""}${item.fontWeight ?? 800} ${size}px ${item.fontFamily ? `"${item.fontFamily}", ${appSans()}` : appSans()}`;
+  const L = morphLayout(tx.morph ?? [], tx.from ?? "", tx.to ?? "", tx.u ?? 0, {
+    measure: measurer(font, (item.letterSpacing ?? -0.04) * size, (item.wordSpacing ?? 0) * size),
+    align: item.align ?? "left", maxW: item.wrap ? Math.max(1, item.w - pad * 2) : null, caseOf: (s) => caseOfText(s, item.textCase),
+  });
+  return (
+    <span style={{ position: "relative", display: "inline-block", width: L.w, height: L.lines * lh, verticalAlign: "top" }}>
+      {L.chars.map((c, i) => c.op <= 0.001 || c.sc * c.sy <= 0.001 ? null : (
+        <span key={i} style={{ position: "absolute", left: c.x, top: c.line * lh, height: lh, lineHeight: `${lh}px`, whiteSpace: "pre", opacity: c.op < 1 ? c.op : undefined,
+          transform: c.dy || c.sc !== 1 || c.sy !== 1 ? `translateY(${c.dy}em) scale(${c.sc}, ${c.sc * c.sy})` : undefined, filter: c.blur ? `blur(${c.blur.toFixed(3)}em)` : undefined }}>{c.ch}</span>
+      ))}
+    </span>
+  );
+}
+function caseOfText(t: string, c?: string) {
+  if (c === "uppercase") return t.toUpperCase();
+  if (c === "lowercase") return t.toLowerCase();
+  if (c === "capitalize") return t.replace(/\b\p{L}/gu, (m) => m.toUpperCase());
+  return t;
 }
 
 /** The current frame of a video, as an image (for video showing through text). */
@@ -275,10 +322,12 @@ function ItemView({ item: raw, s, editing, cropping, local = 0, extra }: { item:
   const item: Item = resolveItem(raw, local);
   const letters = letterColors(raw, local);
   const { edit, setUI } = useStore.getState();
+  // corner pin: the item warps in perspective onto its four corners (applied in its own frame, before it turns)
+  const pinH = raw.kind === "line" || raw.kind === "motion" ? null : pinHAt(raw, local);
   const style: React.CSSProperties = {
     left: s.x - item.w / 2, top: s.y - item.h / 2, width: item.w, height: item.h,
     // flat items get a 2D transform (and no 3D layer), so their edges stay crisp however big they get
-    transform: isFlat(s) ? `rotate(${s.rz}deg) scale(${s.scale})` : xf(s), opacity: s.opacity, borderRadius: item.kind === "ellipse" || item.kind === "glass" ? "50%" : item.radius ?? 0,
+    transform: (isFlat(s) ? `rotate(${s.rz}deg) scale(${s.scale})` : xf(s)) + (pinH ? ` ${pinCSS(pinH)}` : ""), opacity: s.opacity, borderRadius: item.kind === "ellipse" || item.kind === "glass" ? "50%" : item.radius ?? 0,
     ...(isFlat(s) ? { transformStyle: "flat", ["--bf" as string]: "visible", ["--backd" as string]: "none" } : {}),
     filter: [item.fx?.some((f) => !f.off && (f.amount > 0 || f.keys?.some((k) => k.v > 0))) ? `url(#fxi-${item.id})` : "", lookFilter(item), s.blur ? `blur(${s.blur}px)` : ""].filter(Boolean).join(" ") || undefined, mixBlendMode: item.blend && item.blend !== "normal" ? item.blend : undefined,
     ...extra,
@@ -337,7 +386,7 @@ function ItemView({ item: raw, s, editing, cropping, local = 0, extra }: { item:
                 setUI({ editingText: null });
               }}
             >{item.text}</span>
-          ) : <span className="tspan" style={span}>{tx.morph ? <MorphText chars={tx.morph} /> : textAnimOf(item) ? <AnimatedText item={item} text={revealed(item.text ?? "", s.reveal)} local={local} colors={letters} fill={letterFill} /> : letters ? <ColoredText text={revealed(item.text ?? "", s.reveal)} colors={letters} /> : revealed(item.text ?? "", s.reveal) || " "}</span>}
+          ) : <span className="tspan" style={span}>{tx.morph ? <MorphText item={item} tx={tx} /> : textAnimOf(item) ? <AnimatedText item={item} text={revealed(item.text ?? "", s.reveal)} local={local} colors={letters} fill={letterFill} /> : letters ? <ColoredText text={revealed(item.text ?? "", s.reveal)} colors={letters} /> : revealed(item.text ?? "", s.reveal) || " "}</span>}
         </div>
       </div>
     );
@@ -524,9 +573,10 @@ export function Viewer() {
       setCam({ x: wx - mx / nz, y: wy - my / nz, z: nz });
       return;
     }
+    const handOn = !!useStore.getState().ui.hand;
     setVz((v) => {
-      const nz = Math.min(8, Math.max(1, v.z * d.scale));
-      if (nz <= 1.02) return { z: 1, x: 0, y: 0 }; // back to fit
+      const nz = Math.min(8, Math.max(handOn ? 0.2 : 1, v.z * d.scale));
+      if (!handOn && nz <= 1.02) return { z: 1, x: 0, y: 0 }; // back to fit
       const ox = mx - d.dx, oy = my - d.dy; // where the fingers were
       return { z: nz, x: mx - ((ox - v.x) * nz) / v.z, y: my - ((oy - v.y) * nz) / v.z };
     });
@@ -536,8 +586,36 @@ export function Viewer() {
     if (!el) return;
     const on = (ev: Event) => pinchRef.current((ev as CustomEvent<PinchDetail>).detail);
     el.addEventListener("mo-pinch", on);
-    return () => el.removeEventListener("mo-pinch", on);
+    // the mouse wheel zooms with the hand on (and with Ctrl, or a trackpad pinch, any time) around the pointer
+    const wheel = (e: WheelEvent) => {
+      if (useStore.getState().ui.view === "board") return;
+      if (!useStore.getState().ui.hand && !e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      pinchRef.current({ dx: 0, dy: 0, scale: Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0018)), cx: e.clientX, cy: e.clientY });
+    };
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => { el.removeEventListener("mo-pinch", on); el.removeEventListener("wheel", wheel); };
   }, []);
+  /** Zoom by a step around the middle of the view (the hand's + and −). */
+  const zoomStep = (f: number) => {
+    const r = wrap.current?.getBoundingClientRect();
+    if (r) pinchRef.current({ dx: 0, dy: 0, scale: f, cx: r.left + r.width / 2, cy: r.top + r.height / 2 });
+  };
+  /** The hand: dragging moves the view around (one finger or the mouse); two fingers still pinch. */
+  const handDrag = (e: React.PointerEvent) => {
+    if (e.pointerType === "mouse" && e.button !== 0 && e.button !== 1) return;
+    e.preventDefault(); e.stopPropagation();
+    const el = e.currentTarget as HTMLElement;
+    el.classList.add("grabbing");
+    let lx = e.clientX, ly = e.clientY;
+    const mv = (ev: PointerEvent) => {
+      const dx = ev.clientX - lx, dy = ev.clientY - ly; lx = ev.clientX; ly = ev.clientY;
+      if (ui.view === "board") setCam((c) => (c ? { ...c, x: c.x - dx / c.z, y: c.y - dy / c.z } : c));
+      else setVz((v) => ({ ...v, x: v.x + dx, y: v.y + dy }));
+    };
+    const up = () => { el.classList.remove("grabbing"); removeEventListener("pointermove", mv); removeEventListener("pointerup", up); removeEventListener("pointercancel", up); };
+    addEventListener("pointermove", mv); addEventListener("pointerup", up); addEventListener("pointercancel", up);
+  };
   const cvs = canvases(rawProject);
   const live = cvs.find((c) => t >= c.start && t < c.end) ?? cvs[cvs.length - 1];
   const lpos = boardPos(rawProject, live);
@@ -599,7 +677,8 @@ export function Viewer() {
     if (fixes.length) edit((p) => { for (const [id, w, h] of fixes) { const it = p.items.find((x) => x.id === id); if (it) { it.w = w; it.h = h; } } }, false);
   });
   const sel = project.items.find((i) => i.id === selected);
-  const selState = sel ? (sel.kind === "text" && sel.onPath ? onPathBox(project, sel, itemState(project, sel, t), pathGlyphs(project, resolveItem(sel, t - sel.start), t, appSans()))
+  const selState = sel ? (sel.onPath && sel.kind !== "text" ? onPathBox(project, sel, itemState(project, sel, t), pathPlace(project, sel, t))
+    : sel.kind === "text" && sel.onPath ? onPathBox(project, sel, itemState(project, sel, t), pathGlyphs(project, resolveItem(sel, t - sel.start), t, appSans()))
     : sel.kind === "motion" ? (() => { const s0 = itemState(project, sel, t), lt = Math.min(Math.max(t - sel.start, 0), sel.end - sel.start), f = pathTransform(sel, lt), c = pathPivot(sel), q = f ? f(c) : c; return { ...s0, x: q[0], y: q[1] }; })()
     : itemState(project, sel, t)) : null;
   const preview = useAnimPreview(project);
@@ -784,7 +863,7 @@ export function Viewer() {
     const next = stack[(at + 1) % stack.length];
     const it = project.items.find((i) => i.id === next)!;
     select(next);
-    if (stack.length > 1) toast(`${it.name} · ${stack.indexOf(next) + 1} of ${stack.length} here · Ctrl-click again for the one behind`);
+    if (stack.length > 1) toast(`${it.name} · ${stack.indexOf(next) + 1} of ${stack.length}`);
     startMove(e, it);
     return true;
   }
@@ -792,7 +871,7 @@ export function Viewer() {
   /** Text on a path: dragging it slides it along the path (its "Along" value, keyframed like any other). */
   function startSlide(e: React.PointerEvent, item: Item) {
     const sx = e.clientX, sy = e.clientY;
-    const g = pathGlyphs(project, resolveItem(item, t - item.start), t, appSans());
+    const g = item.kind === "text" ? pathGlyphs(project, resolveItem(item, t - item.start), t, appSans()) : pathPlace(project, item, t);
     if (!g) return;
     const c0 = g.center, proj = project;
     let near = numAt(item, "pathOffset", t - item.start), moved = false;
@@ -811,7 +890,7 @@ export function Viewer() {
 
   function startMove(e: React.PointerEvent, item: Item) {
     const multi = useStore.getState().ui.multi;
-    if (item.kind === "text" && item.onPath && !(multi.length > 1 && multi.includes(item.id))) { startSlide(e, item); return; }
+    if (item.onPath && item.kind !== "motion" && !(multi.length > 1 && multi.includes(item.id))) { startSlide(e, item); return; }
     const sx = e.clientX, sy = e.clientY;
     const x0 = ownValue(item, "x", t), y0 = ownValue(item, "y", t);
     const st = itemState(project, item, t);
@@ -1023,7 +1102,7 @@ export function Viewer() {
       {/* item effects: one SVG filter per item, rebuilt for the current moment (they can animate) */}
       <svg className="fxdefs" width="0" height="0" aria-hidden="true" dangerouslySetInnerHTML={{ __html: `<defs>${itemFxFilter("fxi-canvas", resolveFx(project.canvasFx, t), t) ?? ""}${items.filter((it) => it.fx?.length).map((it) => itemFxFilter(`fxi-${it.id}`, resolveFx(it.fx, (preview?.itemId === it.id ? preview.t : t) - it.start), (preview?.itemId === it.id ? preview.t : t) - it.start) ?? "").join("")}</defs>` }} />
       {project.items.filter((i) => i.kind === "audio" && i.src).map((i) => <AudioPlayer key={i.id} item={i} />)}
-      <div className={"stagewrap" + (board ? " board" : "")} ref={wrap}
+      <div className={"stagewrap" + (board ? " board" : "") + (ui.hand ? " hand" : "")} ref={wrap}
         onWheel={board && cam ? (e) => {
           const r = wrap.current!.getBoundingClientRect();
           const mx = e.clientX - r.left - r.width / 2, my = e.clientY - r.top - r.height / 2;
@@ -1032,6 +1111,18 @@ export function Viewer() {
           setCam({ x: wx - mx / nz, y: wy - my / nz, z: nz });
         } : undefined}>
         {board && cam && <BoardPlane project={rawProject} cam={cam} setCam={setCam} size={wsize} live={live} />}
+        {/* the hand: a layer over the whole view that only moves and zooms it (nothing under it gets picked) */}
+        {ui.hand && <div className="handpad" onPointerDown={handDrag} onContextMenu={(e) => e.preventDefault()} onDoubleClick={() => (board ? setCam(fitCam(rawProject, wsize.w, wsize.h)) : setVz({ z: 1, x: 0, y: 0 }))} />}
+        {ui.hand && (
+          <div className="handctl" onPointerDown={(e) => e.stopPropagation()}>
+            {!board && <CanvasPeek project={project} t={t} k={k} vz={vz} size={wsize} kFit={kFit} setVz={setVz} />}
+            <div className="hzoom">
+              <button title="Zoom out" aria-label="Zoom out" onClick={() => (board && cam ? setCam({ ...cam, z: Math.max(0.02, cam.z / 1.25) }) : zoomStep(1 / 1.25))}><svg viewBox="0 0 24 24" width={14} height={14}><path d="M5 12h14" stroke="currentColor" strokeWidth={2} strokeLinecap="round" /></svg></button>
+              <button className="hpct" title="Back to fit" onClick={() => (board ? setCam(fitCam(rawProject, wsize.w, wsize.h)) : setVz({ z: 1, x: 0, y: 0 }))}>{Math.round(k * 100)}%</button>
+              <button title="Zoom in" aria-label="Zoom in" onClick={() => (board && cam ? setCam({ ...cam, z: Math.min(4, cam.z * 1.25) }) : zoomStep(1.25))}><svg viewBox="0 0 24 24" width={14} height={14}><path d="M5 12h14M12 5v14" stroke="currentColor" strokeWidth={2} strokeLinecap="round" /></svg></button>
+            </div>
+          </div>
+        )}
         {board && cam && (() => {
           const l = (lpos.x - cam.x) * k + wsize.w / 2, tp = (lpos.y - cam.y) * k + wsize.h / 2, cw = project.width * k, ch = project.height * k;
           return <>
@@ -1077,7 +1168,7 @@ export function Viewer() {
                 const g = groupOf(project, it);
                 setUI({ selGroup: null, inGroup: g ? g.id : null });
                 select(next);
-                if (stack.length > 1) toast(`${it.name} · ${stack.indexOf(next) + 1} of ${stack.length} here · Alt-click again for the next`);
+                if (stack.length > 1) toast(`${it.name} · ${stack.indexOf(next) + 1} of ${stack.length}`);
                 startMove(e, it);
                 return;
               }
@@ -1103,8 +1194,8 @@ export function Viewer() {
             if (it && chain.length && ui.selGroup) {
               const at = chain.findIndex((x) => x.id === ui.selGroup);
               const next = chain[at + 1];
-              if (next) { select(null); setUI({ inGroup: chain[at].id, selGroup: next.id }); toast(`Inside ${chain[at].name} · double-click again to go deeper`); return; }
-              select(it.id); toast(`Editing inside ${chain[chain.length - 1].name} · click outside to leave`); return;
+              if (next) { select(null); setUI({ inGroup: chain[at].id, selGroup: next.id }); toast(`Inside ${chain[at].name}`); return; }
+              select(it.id); toast(`Editing inside ${chain[chain.length - 1].name}`); return;
             }
             const g = it && groupOf(project, it);
             if (it && g && ui.inGroup !== g.id) { select(it.id); toast(`Editing inside ${g.name} · click outside to leave`); return; }
@@ -1140,6 +1231,8 @@ export function Viewer() {
               if (masks.has(it.id)) return ghost ? null : <ItemView key={it.id} item={it} s={s0} local={tt - it.start} editing={false} cropping={false} extra={{ opacity: ui.onion ? 0.22 : 0, pointerEvents: "none" }} />;
               const s = alpha < 1 ? { ...s0, opacity: s0.opacity * alpha } : s0;
               const path = it.kind === "text" && (it.onPath || it.follow) ? pathGlyphs(project, resolveItem(it, tt - it.start), tt, appSans()) : null;
+              // anything else riding a line or outline: put where it sits on it, hinged round the edge
+              const placed = it.kind !== "text" && it.onPath ? pathPlace(project, it, tt) : null;
               const clip = maskClipPath(project, it, s, tt);
               // the fading copy at the item's old place in the stack (while it changes layer)
               // (text on a path: the copy is its letters on the path, never the plain text at its own spot)
@@ -1157,7 +1250,7 @@ export function Viewer() {
                   ))}
                   {ui.onion && maskOf(project, it) && <ItemView key={`${it.id}~whole`} item={{ ...it, id: `${it.id}~whole` }} s={s} local={tt - it.start} editing={false} cropping={false} extra={{ opacity: 0.22, pointerEvents: "none" }} />}
                   <TextMaskDefs project={project} item={it} s={s} t={tt} />
-                  <ItemView item={it} s={onPathBox(project, it, s, path)} local={tt - it.start} editing={ui.editingText === it.id} cropping={ui.cropping === it.id} extra={{ clipPath: clip, ...(textMaskOf(project, it, tt) ? { maskImage: `url(#tmask-${it.id})`, WebkitMaskImage: `url(#tmask-${it.id})` } : {}), ...(path ? { opacity: 0 } : {}) }} />
+                  <ItemView item={it} s={placed ? { ...s, x: placed.O[0], y: placed.O[1] } : onPathBox(project, it, s, path)} local={tt - it.start} editing={ui.editingText === it.id} cropping={ui.cropping === it.id} extra={{ clipPath: clip, ...(textMaskOf(project, it, tt) ? { maskImage: `url(#tmask-${it.id})`, WebkitMaskImage: `url(#tmask-${it.id})` } : {}), ...(path ? { opacity: 0 } : {}), ...(placed ? { transform: placeCss(placed) } : {}) }} />
                   {path && <TextOnPath item={resolveItem(it, tt - it.start)} s={s} g={path} />}
                 </Wrap>
               );
@@ -1209,9 +1302,9 @@ export function Viewer() {
           {mbox && !selGroupTrack && (
             <div className="gbox multi" style={{ left: mbox.l, top: mbox.t, width: mbox.w, height: mbox.h }}
               onPointerDown={(e) => { if (e.button !== 0 || ctrlPick(e)) return; const first = project.items.find((i) => i.id === ui.multi[0]); if (first) { e.stopPropagation(); startMove(e, first); } }}
-              title={`${ui.multi.length} items · drag to move them together · turn them with the knob (Shift snaps 15°)`}>
+              title={`${ui.multi.length} items`}>
               <b>{ui.multi.length} selected</b>
-              <span className="grot" title="Turn them together around their middle · snaps to 15° steps (Shift locks, Ctrl turns snapping off)" onPointerDown={startMultiRotate} />
+              <span className="grot" title="Turn them (Shift: 15°)" onPointerDown={startMultiRotate} />
             </div>
           )}
           {selGroupTrack && gbox && (() => {
@@ -1228,13 +1321,13 @@ export function Viewer() {
                   const it = project.items.find((i) => i.id === el.dataset.id)!;
                   const chain = groupChain(project, it).reverse(); // outermost first
                   const next = chain[chain.findIndex((x) => x.id === selGroupTrack.id) + 1];
-                  if (next) { select(null); setUI({ inGroup: selGroupTrack.id, selGroup: next.id }); toast(`Inside ${selGroupTrack.name} · ${next.name} picked · double-click again to go deeper`); return; }
-                  select(it.id); toast(`Editing inside ${selGroupTrack.name} · click outside to leave`);
+                  if (next) { select(null); setUI({ inGroup: selGroupTrack.id, selGroup: next.id }); toast(`Inside ${selGroupTrack.name} `); return; }
+                  select(it.id); toast(`Editing inside ${selGroupTrack.name}`);
                 }}
-                title={`${selGroupTrack.name} · drag to move the whole group · double-click an item to edit it`}>
+                title={selGroupTrack.name}>
                 <b>{selGroupTrack.name}</b>
                 {["nw", "ne", "sw", "se"].map((c) => <i key={c} className={c} onPointerDown={(e) => { const [x, y] = cx(); startGroupScale(e, selGroupTrack.id, x, y); }} />)}
-                <span className="grot" title="Rotate the group · snaps to 15° steps (Shift locks, Ctrl turns snapping off)" onPointerDown={(e) => { const [x, y] = cx(); startGroupRotate(e, selGroupTrack.id, x, y); }} />
+                <span className="grot" title="Rotate (Shift: 15°)" onPointerDown={(e) => { const [x, y] = cx(); startGroupRotate(e, selGroupTrack.id, x, y); }} />
                 <button className={"gknob" + (ui.mode3d ? " on" : "")} title={ui.mode3d ? "Back to 2D" : "3D: tilt the whole group"} onPointerDown={(e) => { e.stopPropagation(); setUI({ mode3d: !ui.mode3d }); }}>
                   <Icon name={ui.mode3d ? "rect" : "cube"} size={14} />
                 </button>
@@ -1268,9 +1361,31 @@ export function Viewer() {
               if (!it || !ms?.visible) return null;
               return <div key={id} className="selbox multi" style={{ left: ms.x - it.w / 2, top: ms.y - it.h / 2, width: it.w, height: it.h, transform: xf(ms), borderRadius: it.kind === "ellipse" || it.kind === "glass" ? "50%" : it.radius ?? 0 }} />;
             })}
+            {/* the edit-mode switch: one button, each click goes to the next way of editing the item (2D → 3D → corner pin → 2D);
+                its icon shows where the next click goes. It sits by the item's top-right on screen, upright and always the same
+                size, however the item is turned, tilted, scaled or pinned. */}
+            {sel && sel.kind !== "motion" && sel.kind !== "line" && selState?.visible && ui.cropping !== sel.id && ui.multi.length < 2 && (() => {
+              const cur = ui.pinning === sel.id ? "pin" : ui.mode3d ? "3d" : "2d";
+              const next = cur === "2d" ? "3d" : cur === "3d" ? (PINNABLE(sel) ? "pin" : "2d") : "2d";
+              const tip = { "2d": "Back to 2D", "3d": "Switch to 3D: rotate on every axis with the gimbal", pin: "Corner pin: drag each corner on its own" }[next];
+              // the same spot as always, right beside the rotate stick (it follows the item there), but upright and one size
+              const sk = k * Math.max(0.02, Math.abs(selState.scale));
+              const [cx, cy] = screenPoint(selState, 23 / sk, -sel.h / 2 - 40 / sk);
+              return (
+                <button className={"modeknob" + (cur !== "2d" ? " on" : "")} title={tip} aria-label={tip}
+                  style={{ left: cx - 11 / k, top: cy - 11 / k }}
+                  onPointerDown={(e) => { e.stopPropagation(); setUI({ mode3d: next === "3d", pinning: next === "pin" ? sel.id : null }); }}>
+                  <Icon name={next === "3d" ? "cube" : next === "pin" ? "pin" : "rect"} size={16} />
+                </button>
+              );
+            })()}
+            {/* corner pin: its corners while pinning; just the pinned outline otherwise */}
+            {sel && PINNABLE(sel) && selState?.visible && ui.multi.length < 2 && (ui.pinning === sel.id || isPinned(sel)) && (
+              <PinEditor item={sel} s={selState} k={k} edit={ui.pinning === sel.id} />
+            )}
             {sel && sel.kind !== "motion" && !(sel.kind === "line" && (sel.line?.pts.length ?? 0) < 2) && selState?.visible && ui.cropping !== sel.id && (
               <div
-                className="selbox"
+                className={"selbox" + (ui.pinning === sel.id ? " pinning" : "")}
                 style={{
                   left: selState.x - sel.w / 2, top: selState.y - sel.h / 2, width: sel.w, height: sel.h,
                   transform: xf(selState),
@@ -1279,14 +1394,11 @@ export function Viewer() {
                   ["--k" as string]: k * Math.max(0.02, Math.abs(selState.scale)),
                 }}
               >
+                {ui.pinning !== sel.id && <>
                 {["nw", "ne", "sw", "se"].map((c) => <i key={c} className={c} title="Drag to resize · keeps the shape (Shift: free)" onPointerDown={(e) => startResize(e, c)} />)}
                 {(sel.kind === "text" ? ["e", "w"] : ["n", "s", "e", "w"]).map((c) => <i key={c} className={"edge " + c} title={sel.kind === "text" ? "Drag to set the text width" : "Drag to stretch this side (Alt: both sides)"} onPointerDown={(e) => startResize(e, c)} />)}
-                <span className="rot" title="Drag to rotate · snaps to 15° steps (Shift locks, Ctrl turns snapping off)" onPointerDown={startRotate} />
-                <button className={"knob" + (ui.mode3d ? " on" : "")} title={ui.mode3d ? "Back to 2D" : "Switch to 3D: rotate on every axis with the gimbal"}
-                  style={undefined}
-                  onPointerDown={(e) => { e.stopPropagation(); setUI({ mode3d: !ui.mode3d }); }}>
-                  <Icon name={ui.mode3d ? "rect" : "cube"} size={16} />
-                </button>
+                <span className="rot" title="Rotate (Shift: 15°)" onPointerDown={startRotate} />
+                </>}
 
               </div>
             )}
@@ -1352,7 +1464,7 @@ export function Viewer() {
           : zoomed ? <button className="chip on" title="Back to fit" onClick={() => setVz({ z: 1, x: 0, y: 0 })}>{Math.round(k * 100)}% · Fit</button>
           : <span className="chip">Fit · {Math.round(k * 100)}%</span>}
         <span className="sp" />
-        <button className={"ib" + (ui.onion ? " on" : "")} title="Onion skin: see the selected item faintly at its previous (pink) and next (blue) keyframes; masked items and hidden masks show faintly in full, with marching ants round them" onClick={() => setUI({ onion: !ui.onion })}><Icon name="frame" /></button>
+        <button className={"ib" + (ui.onion ? " on" : "")} title="Onion skin" onClick={() => setUI({ onion: !ui.onion })}><Icon name="frame" /></button>
         <GridButton />
         <button className={"ib" + (orbit ? " on" : "")} title="3D orbit view" onClick={() => setOrbit(!orbit)}><Icon name="cube" /></button>
           </>
@@ -1364,5 +1476,43 @@ export function Viewer() {
           : zoomed ? <button className="chip on vfit" title="Back to fit" onClick={() => setVz({ z: 1, x: 0, y: 0 })}>{Math.round(k * 100)}% · Fit</button> : null;
       })()}
     </section>
+  );
+}
+
+/**
+ * The hand's mini map: the whole canvas small, its items as little blocks, and a frame showing the part of it in
+ * view. Tap or drag on it to go there.
+ */
+function CanvasPeek({ project, t, k, vz, size, kFit, setVz }: { project: Project; t: number; k: number; vz: { z: number; x: number; y: number }; size: { w: number; h: number }; kFit: number; setVz: (v: { z: number; x: number; y: number }) => void }) {
+  const M = 104, s = M / Math.max(project.width, project.height);
+  const mw = project.width * s, mh = project.height * s;
+  // where the canvas sits in the view (it's centred, then moved by vz), and so which part of it is in view
+  const left = (size.w - project.width * k) / 2 + vz.x, top = (size.h - project.height * k) / 2 + vz.y;
+  const vx0 = (0 - left) / k, vy0 = (0 - top) / k, vx1 = (size.w - left) / k, vy1 = (size.h - top) / k;
+  const go = (e: React.PointerEvent) => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const at = (ev: { clientX: number; clientY: number }) => {
+      const px = Math.min(Math.max((ev.clientX - r.left) / s, 0), project.width), py = Math.min(Math.max((ev.clientY - r.top) / s, 0), project.height);
+      // put that point of the canvas in the middle of the view
+      setVz({ z: vz.z, x: size.w / 2 - px * k - (size.w - project.width * k) / 2, y: size.h / 2 - py * k - (size.h - project.height * k) / 2 });
+    };
+    e.preventDefault(); e.stopPropagation(); at(e);
+    const mv = (ev: PointerEvent) => at(ev);
+    const up = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); };
+    addEventListener("pointermove", mv); addEventListener("pointerup", up);
+  };
+  void kFit;
+  const items = project.items.filter((it) => it.kind !== "audio" && it.kind !== "camera" && t >= it.start && t < it.end);
+  return (
+    <div className="peek" style={{ width: mw, height: mh, background: project.background }} onPointerDown={go} title="Where you are on the canvas · tap or drag to go somewhere">
+      {items.map((it) => {
+        const st = itemState(project, it, t);
+        if (!st.visible) return null;
+        const w = Math.max(2, it.w * Math.abs(st.scale) * s), h = Math.max(2, it.h * Math.abs(st.scale) * s);
+        const fill = /^#[0-9a-f]{3,8}$/i.test(it.fill) ? it.fill : it.kind === "text" ? it.color ?? "#888" : "#8a8a8a";
+        return <i key={it.id} style={{ left: st.x * s - w / 2, top: st.y * s - h / 2, width: w, height: h, background: fill, opacity: 0.85 * st.opacity, transform: st.rz ? `rotate(${st.rz}deg)` : undefined }} />;
+      })}
+      <b style={{ left: vx0 * s, top: vy0 * s, width: (vx1 - vx0) * s, height: (vy1 - vy0) * s }} />
+    </div>
   );
 }

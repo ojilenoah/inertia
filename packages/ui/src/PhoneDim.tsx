@@ -22,15 +22,14 @@ export function PhoneDim() {
         const ids = [...new Set([s.selected, ...s.ui.multi].filter(Boolean) as string[])];
         const holes: string[] = [];
         // the item on the canvas: one window around it (and its handles)
-        const boxes = [...document.querySelectorAll(".selbox"), ...ids.flatMap((id) => [...document.querySelectorAll(`.world .obj[data-id="${CSS.escape(id)}"]`)])]
-          .map((e) => e.getBoundingClientRect()).filter((r) => r.width || r.height);
-        if (boxes.length) holes.push(rect({ left: Math.min(...boxes.map((r) => r.left)), top: Math.min(...boxes.map((r) => r.top)), right: Math.max(...boxes.map((r) => r.right)), bottom: Math.max(...boxes.map((r) => r.bottom)) }, 8));
         // its clips on the tracks
         for (const id of ids) for (const c of document.querySelectorAll(`.lrows .clip[data-item="${CSS.escape(id)}"]`)) holes.push(rect(c.getBoundingClientRect(), 2));
         // what the popup was opened from (a transition's seam: its canvas row)
         for (const f of document.querySelectorAll(".mo-focus")) holes.push(rect((f.closest(".lrow.canvas") ?? f).getBoundingClientRect(), 2));
-        // the outer edge runs one way and every hole the other way, so each hole stays clear
-        d = `M0 0H${innerWidth}V${innerHeight}H0Z` + holes.join("");
+        // only the tracks are blurred (the canvas stays sharp: you see the item change while you edit it).
+        // The outer edge runs one way and every hole the other way, so each hole stays clear.
+        const tl = document.querySelector(".mo .timeline")?.getBoundingClientRect();
+        if (tl && tl.width) d = `M${Math.round(tl.left)} ${Math.round(tl.top)}H${Math.round(tl.right)}V${Math.round(tl.bottom)}H${Math.round(tl.left)}Z` + holes.join("");
       }
       if (d !== last) { last = d; setShape(d || null); }
     };

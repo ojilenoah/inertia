@@ -1,5 +1,5 @@
 import type { AlignHow } from "./editing";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import type { LayerMove } from "@moshion/engine";
 import { rowBelow, keyTimes, moveLayer, ownValue, uid, addKey, fmtClock, itemHidden, keyLookAndText, layerAt, setLayerKey, stackCompare } from "@moshion/engine";
@@ -7,6 +7,9 @@ import type { Item, Prop } from "@moshion/engine";
 import { deleteSelection, useStore } from "./store";
 import { sectionsFor } from "./EditPanel";
 import { groupOf, itemsInGroup } from "@moshion/engine";
+import { isPinned } from "@moshion/engine";
+import { PINNABLE } from "./Viewer";
+import { startMaskPick } from "./MaskPick";
 import { Icon } from "./Icon";
 import { savePreset } from "./presets";
 import { align, copyKeyframe, copyStyle, pasteKeyframe, pasteStyle, toggleLock, groupSelection, ungroupSelection } from "./editing";
@@ -35,8 +38,8 @@ export function CanvasMenu() {
   const ref = useRef<HTMLDivElement>(null);
   const { setUI } = useStore.getState();
   const close = () => setUI({ ctx: null });
-  const [maskOpen, setMaskOpen] = useState(false);
-  useEffect(() => setMaskOpen(false), [ctx?.itemId]);
+  const [maskOpen, setMaskOpen] = useState<"with" | "for" | null>(null);
+  useEffect(() => setMaskOpen(null), [ctx?.itemId]);
 
   useEffect(() => {
     if (!ctx) return;
@@ -48,7 +51,29 @@ export function CanvasMenu() {
   }, [ctx]);
 
   const it = ctx ? project.items.find((i) => i.id === ctx.itemId) : undefined;
-  const x = ctx ? Math.max(8, Math.min(ctx.x, innerWidth - 240)) : 0, y = ctx ? Math.max(8, Math.min(ctx.y, innerHeight - 470)) : 0;
+  // where it goes: right under the item on the canvas, or right over it when there's more room there; at the
+  // pointer when neither side has room. Whole pixels, so text and lines stay crisp.
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!ctx || !el) { setAt(null); return; }
+    const mw = el.offsetWidth, mh = el.offsetHeight;
+    const clampX = (v: number) => Math.round(Math.max(8, Math.min(v, innerWidth - mw - 8)));
+    const clampY = (v: number) => Math.round(Math.max(8, Math.min(v, innerHeight - mh - 8)));
+    const o = document.querySelector(`.world .obj[data-id="${CSS.escape(ctx.itemId)}"]`)?.getBoundingClientRect();
+    const sb = document.querySelector(".selbox")?.getBoundingClientRect();
+    if (o && o.width && o.bottom > 0 && o.top < innerHeight) {
+      const top = Math.min(o.top, sb && sb.width ? sb.top : Infinity), bottom = Math.max(o.bottom, sb && sb.width ? sb.bottom : -Infinity);
+      const below = innerHeight - bottom - 18, over = top - 18, cx = o.left + o.width / 2 - mw / 2;
+      if (below >= mh || (below >= over && below >= 160)) { setAt({ x: clampX(cx), y: clampY(bottom + 10) }); return; }
+      if (over >= mh || over >= 160) { setAt({ x: clampX(cx), y: clampY(top - 10 - Math.min(mh, over)) }); return; }
+    }
+    setAt({ x: clampX(ctx.x), y: clampY(ctx.y) });
+  }, [ctx?.itemId, ctx?.x, ctx?.y, maskOpen]);
+  const x = at?.x ?? (ctx ? Math.round(Math.max(8, Math.min(ctx.x, innerWidth - 240))) : 0), y = at?.y ?? (ctx ? Math.round(Math.max(8, Math.min(ctx.y, innerHeight - 330))) : 0);
+  const multiN = useStore.getState().ui.multi.length;
+  // groups this item could cut (not ones it's inside)
+  const maskGroups = it ? project.tracks.filter((g) => g.kind === "group" && !itemsInGroup(project, g.id).some((q) => q.id === it.id)) : [];
   const row = (label: string, keys: string, run: () => void, danger = false) => (
     <button className={"cm-row" + (danger ? " danger" : "")} onClick={() => { run(); close(); }}>
       <span>{label}</span><kbd>{keys}</kbd>
@@ -58,7 +83,7 @@ export function CanvasMenu() {
     <AnimatePresence>
       {ctx && it && (
         <motion.div
-          ref={ref} className="cmenu" role="menu" style={{ left: x, top: y }}
+          ref={ref} className="cmenu" role="menu" style={{ left: x, top: y, visibility: at ? undefined : "hidden" }}
           initial={{ opacity: 0, scale: 0.96, y: -4 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, transition: { duration: 0.08 } }}
           transition={{ duration: 0.12 }}
           onContextMenu={(e) => e.preventDefault()}
@@ -81,75 +106,74 @@ export function CanvasMenu() {
               );
             })()}
           </div>
+          {/* stacking, then the everyday actions: one row of buttons */}
+          <div className="cm-tools">
+            {([["front", "tofront", "Bring to front", "Ctrl+Shift+]"], ["forward", "forward", "Bring forward", "Ctrl+]"], ["backward", "backward", "Send backward", "Ctrl+["], ["back", "toback", "Send to back", "Ctrl+Shift+["]] as const).map(([dir, ic, tip, keys]) => (
+              <button key={dir} title={`${tip} · ${keys}`} aria-label={tip} onClick={() => { layer(it.id, dir); close(); }}><Icon name={ic} /></button>
+            ))}
+            <i className="cm-vsep" />
+            <button title="Duplicate · Ctrl+D" aria-label="Duplicate" onClick={() => { duplicate(it.id); close(); }}><Icon name="dup" /></button>
+            {it.kind === "text" && <button title="Edit text · double-click" aria-label="Edit text" onClick={() => { setUI({ editingText: it.id }); close(); }}><Icon name="type" /></button>}
+            {PINNABLE(it) && <button className={isPinned(it) ? "on" : ""} title="Corner pin: drag each corner on its own" aria-label="Corner pin" onClick={() => { useStore.getState().select(it.id); setUI({ pinning: it.id, mode3d: false, ctx: null }); }}><Icon name="pin" /></button>}
+            <button className="danger" title={`${multiN > 1 ? `Delete ${multiN} items` : "Delete"} · Del`} aria-label="Delete" onClick={() => { deleteSelection(); close(); }}><Icon name="trash" /></button>
+          </div>
+          <div className="cm-align" title={it.mask?.inside ? "Line up with the item it's inside" : "Line up (one item: with the canvas)"}>
+            {(["left", "hcenter", "right", "top", "vcenter", "bottom", "hspread", "vspread"] as const).map((k) => <AlignBtn key={k} k={k} close={close} />)}
+          </div>
           <div className="cm-sep" />
-          {row("Bring to front", "Ctrl+Shift+]", () => layer(it.id, "front"))}
-          {row("Bring forward", "Ctrl+]", () => layer(it.id, "forward"))}
-          {row("Send backward", "Ctrl+[", () => layer(it.id, "backward"))}
-          {row("Send to back", "Ctrl+Shift+[", () => layer(it.id, "back"))}
+          <div className="cm-pair">
+            <button title="Copy style · Ctrl+Alt+C" onClick={() => { copyStyle(); close(); }}>Copy style</button>
+            <button title="Paste style · Ctrl+Alt+V" onClick={() => { pasteStyle(); close(); }}>Paste style</button>
+            <button title="Copy keyframe · Alt+C" onClick={() => { copyKeyframe(); close(); }}>Copy key</button>
+            <button title="Paste keyframe · Alt+V" onClick={() => { pasteKeyframe(); close(); }}>Paste key</button>
+          </div>
           <div className="cm-sep" />
-          {it.kind === "text" && row("Edit text", "Dbl-click", () => setUI({ editingText: it.id }))}
-          {row("Duplicate", "Ctrl+D", () => duplicate(it.id))}
-          {(() => { const multi = useStore.getState().ui.multi, ids = multi.includes(it.id) && multi.length > 1 ? multi : [it.id];
-            return row(ids.length > 1 ? `Lock ${ids.length} selected` : it.locked ? "Unlock" : "Lock", "Ctrl+Shift+L", () => toggleLock(ids)); })()}
-          {groupOf(project, it) && row(`Mask the whole group (${groupOf(project, it)!.name})…`, "", () => setUI({ ctx: null, panel: { section: "transform", itemId: null, trackId: groupOf(project, it)!.id, x: ctx!.x, y: ctx!.y } }))}
-          {/* use this item to mask a group (or another item) */}
-          {project.tracks.some((g) => g.kind === "group" && !itemsInGroup(project, g.id).some((x) => x.id === it.id)) && (
-            <div className="cm-sub">
-              <span className="cm-al">Use as mask for</span>
-              {project.tracks.filter((g) => g.kind === "group" && !itemsInGroup(project, g.id).some((x) => x.id === it.id)).map((g) => (
-                <button key={g.id} className="cm-row" onClick={() => {
-                  useStore.getState().edit((p) => { const tr = p.tracks.find((t) => t.id === g.id); if (tr) tr.mask = { by: it.id, inside: true }; });
-                  useStore.getState().toast(`${it.name} now masks the group ${g.name}`);
-                  close();
-                }}><span>{g.name}</span><kbd>group</kbd></button>
-              ))}
-            </div>
-          )}
-          {/* mask this item with a shape already on the canvas */}
+          {multiN > 1 && useStore.getState().ui.multi.includes(it.id) && row(`Group ${multiN} items`, "Ctrl+G", () => groupSelection())}
+          {groupOf(project, it) && row(`Ungroup ${groupOf(project, it)!.name}`, "Ctrl+Shift+G", () => ungroupSelection())}
+          {/* masks: this item cut by another, or this item cutting a group */}
           {it.mask
-            ? row(`Unmask (masked by ${project.items.find((i) => i.id === it.mask!.by)?.name ?? project.tracks.find((g) => g.id === it.mask!.by)?.name ?? "a shape"})`, "", () => useStore.getState().edit((p) => { const q = p.items.find((i) => i.id === it.id); if (q) delete q.mask; }))
-            : <button className="cm-row" onClick={() => setMaskOpen(!maskOpen)}><span>Mask with…</span><kbd>{maskOpen ? "▴" : "▾"}</kbd></button>}
-          {!it.mask && maskOpen && (
+            ? row(`Unmask (by ${project.items.find((i) => i.id === it.mask!.by)?.name ?? project.tracks.find((g) => g.id === it.mask!.by)?.name ?? "a shape"})`, "", () => useStore.getState().edit((p) => { const q = p.items.find((i) => i.id === it.id); if (q) delete q.mask; }))
+            : <button className="cm-row" onClick={() => setMaskOpen(maskOpen === "with" ? null : "with")}><span>Mask with…</span><kbd className="cm-keep">{maskOpen === "with" ? "▴" : "▾"}</kbd></button>}
+          {!it.mask && maskOpen === "with" && (
             <div className="cm-masks">
+              <button className="cm-row cm-pick" onClick={() => startMaskPick(it.id, "with")}><span>Pick on the canvas or tracks</span><kbd className="cm-keep">◎</kbd></button>
               {project.items.filter((i) => i.id !== it.id && MASKABLE.includes(i.kind)).map((m) => (
                 <button key={m.id} className="cm-row" onClick={() => {
                   useStore.getState().edit((p) => { const q = p.items.find((i) => i.id === it.id); if (q) q.mask = { by: m.id, inside: m.kind === "text" ? undefined : true }; });
-                  useStore.getState().toast(`${it.name} is masked by ${m.name} · Layer card: show or hide the shape, keep inside or outside`);
+                  useStore.getState().toast(`Masked by ${m.name}`);
                   close();
-                }}><span>{m.name}</span><kbd>{m.kind === "shape" ? m.shape?.type ?? "shape" : m.kind}</kbd></button>
+                }}><span>{m.name}</span><kbd className="cm-keep">{m.kind === "shape" ? m.shape?.type ?? "shape" : m.kind}</kbd></button>
               ))}
-              {project.tracks.filter((g) => g.kind === "group" && !itemsInGroup(project, g.id).some((x) => x.id === it.id)).map((g) => (
+              {maskGroups.map((g) => (
                 <button key={g.id} className="cm-row" onClick={() => {
                   useStore.getState().edit((p) => { const q = p.items.find((i) => i.id === it.id); if (q) q.mask = { by: g.id, inside: true }; });
-                  useStore.getState().toast(`${it.name} is masked by the group ${g.name} · all its items cut together`);
+                  useStore.getState().toast(`Masked by ${g.name}`);
                   close();
-                }}><span>{g.name}</span><kbd>group</kbd></button>
+                }}><span>{g.name}</span><kbd className="cm-keep">group</kbd></button>
               ))}
               {!project.items.some((i) => i.id !== it.id && MASKABLE.includes(i.kind)) && <span className="cm-empty">Add a shape, image or video first</span>}
             </div>
           )}
-          <div className="cm-sep" />
-          <div className="cm-align" title={it.mask?.inside ? "Line up with the item it's inside" : "Line up (one item: with the canvas)"}>
-            <span className="cm-al">Across</span>
-            {(["left", "hcenter", "right"] as const).map((k) => <AlignBtn key={k} k={k} close={close} />)}
-            <span className="cm-al">Up/down</span>
-            {(["top", "vcenter", "bottom"] as const).map((k) => <AlignBtn key={k} k={k} close={close} />)}
-            <span className="cm-al">Spread</span>
-            {(["hspread", "vspread"] as const).map((k) => <AlignBtn key={k} k={k} close={close} />)}
-          </div>
+          <button className="cm-row" onClick={() => setMaskOpen(maskOpen === "for" ? null : "for")}><span>Use as mask for…</span><kbd className="cm-keep">{maskOpen === "for" ? "▴" : "▾"}</kbd></button>
+          {maskOpen === "for" && (
+            <div className="cm-masks">
+              <button className="cm-row cm-pick" onClick={() => startMaskPick(it.id, "for")}><span>Pick on the canvas or tracks</span><kbd className="cm-keep">◎</kbd></button>
+              {maskGroups.map((g) => (
+                <button key={g.id} className="cm-row" onClick={() => {
+                  useStore.getState().edit((p) => { const tr = p.tracks.find((t) => t.id === g.id); if (tr) tr.mask = { by: it.id, inside: true }; });
+                  useStore.getState().toast(`${it.name} now masks the group ${g.name}`);
+                  close();
+                }}><span>{g.name}</span><kbd className="cm-keep">group</kbd></button>
+              ))}
+            </div>
+          )}
+          {groupOf(project, it) && row(`Mask the whole group…`, "", () => setUI({ ctx: null, panel: { section: "transform", itemId: null, trackId: groupOf(project, it)!.id, x: ctx!.x, y: ctx!.y } }))}
           {row("Save as preset", "", () => savePreset(it))}
-          {row("Copy style", "Ctrl+Alt+C", () => copyStyle())}
-          {row("Paste style", "Ctrl+Alt+V", () => pasteStyle())}
-          {row("Copy keyframe", "Alt+C", () => copyKeyframe())}
           {keyTimes(it).length > 0 && row("Clear all keyframes", "", () => {
             const s = useStore.getState();
             s.edit((p) => { const x = p.items.find((q) => q.id === it.id); if (!x) return; for (const k of Object.keys(x.keys) as (keyof typeof x.keys)[]) { x.base[k] = ownValue(x, k, s.t); delete x.keys[k]; } delete x.lookKeys; delete x.textKeys; delete x.numKeys; delete x.colorKeys; delete x.shapeKeys; x.fx?.forEach((f) => delete f.keys); });
             s.toast("Keyframes cleared · Ctrl+Z brings them back");
           }, true)}
-          {row("Paste keyframe", "Alt+V", () => pasteKeyframe())}
-          {useStore.getState().ui.multi.length > 1 && useStore.getState().ui.multi.includes(it.id) && row(`Group ${useStore.getState().ui.multi.length} items`, "Ctrl+G", () => groupSelection())}
-          {groupOf(project, it) && row(`Ungroup ${groupOf(project, it)!.name}`, "Ctrl+Shift+G", () => ungroupSelection())}
-          {row(useStore.getState().ui.multi.length > 1 ? `Delete ${useStore.getState().ui.multi.length} items` : "Delete", "Del", () => { deleteSelection(); }, true)}
         </motion.div>
       )}
     </AnimatePresence>

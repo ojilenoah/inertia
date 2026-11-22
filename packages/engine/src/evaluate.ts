@@ -109,8 +109,26 @@ export function composeRotation(outer: Rot, inner: Rot): Rot {
   return { rx: closeTo(rx, want.rx), ry: closeTo(ry, want.ry), rz: closeTo(rz, want.rz) };
 }
 
+/** The groups around a track, innermost first. */
+function tracksUp(project: Project, trackId: string | undefined): Track[] {
+  const out: Track[] = [];
+  let tr = trackId ? project.tracks.find((t) => t.id === trackId) : undefined;
+  for (let n = 0; tr && n < 20; n++) { out.push(tr); tr = tr.parent ? project.tracks.find((t) => t.id === tr!.parent) : undefined; }
+  return out;
+}
+/**
+ * Where a parent (or a linked item) is, as its child sees it: without the groups the child is also in. Those groups
+ * move the child anyway (after its parent link), so counting them in the parent too would move it twice — e.g. a
+ * mask grouped together with the group it masks. `child` is the item, or the group, that follows.
+ */
+export function parentState(project: Project, par: Item, t: Seconds, child: Item | Track): ItemState {
+  const up = "kind" in child && child.kind === "group" ? tracksUp(project, (child as Track).parent) : groupChain(project, child as Item);
+  return itemState(project, par, t, up.length ? new Set(up.map((g) => g.id)) : undefined);
+}
+
 let depth = 0;
-export function itemState(project: Project, item: Item, t: Seconds): ItemState {
+/** `skip`: groups to leave out (see parentState). */
+export function itemState(project: Project, item: Item, t: Seconds, skip?: ReadonlySet<string>): ItemState {
   const local = t - item.start;
   const group = groupOf(project, item);
   const out = { visible: t >= item.start && t < item.end } as ItemState;
@@ -124,23 +142,24 @@ export function itemState(project: Project, item: Item, t: Seconds): ItemState {
     try {
       for (const L of item.links ?? []) {
         const src = L.src === "self" || L.src === item.id ? null : project.items.find((i) => i.id === L.src);
-        const now = src ? itemState(project, src, t)[L.srcProp] : sampleKeys(item.keys[L.srcProp], local, item.base[L.srcProp]);
-        const from = src ? itemState(project, src, src.start)[L.srcProp] : sampleKeys(item.keys[L.srcProp], 0, item.base[L.srcProp]);
+        const now = src ? parentState(project, src, t, item)[L.srcProp] : sampleKeys(item.keys[L.srcProp], local, item.base[L.srcProp]);
+        const from = src ? parentState(project, src, src.start, item)[L.srcProp] : sampleKeys(item.keys[L.srcProp], 0, item.base[L.srcProp]);
         out[L.prop] += (now - from) * L.amount;
       }
       const pl = item.parentLink, par = pl && project.items.find((i) => i.id === pl.id);
       if (pl && par) {
-        const P = itemState(project, par, t), rad = Math.PI / 180, dr = (P.rz - pl.rz0) * rad, k = P.scale / (pl.s0 || 1);
+        const P = parentState(project, par, t, item), rad = Math.PI / 180, dr = (P.rz - pl.rz0) * rad, k = P.scale / (pl.s0 || 1);
         const dx = (out.x - pl.x0) * k, dy = (out.y - pl.y0) * k;
         out.x = P.x + dx * Math.cos(dr) - dy * Math.sin(dr);
         out.y = P.y + dx * Math.sin(dr) + dy * Math.cos(dr);
         out.rz += P.rz - pl.rz0; out.scale *= k;
-        if (!pl.auto) out.opacity *= P.opacity; // a mask's own fading doesn't fade what it masks
+        // (its parent's opacity isn't passed on: fading a parent doesn't fade what follows it)
       }
     } finally { depth--; }
   }
   // each group it's in moves it, innermost first, then the groups around that
   for (const grp of group ? groupChain(project, item) : []) {
+    if (skip?.has(grp.id)) continue;
     const G = groupValues(grp, t), pv = groupPivot(project, grp, t);
     const rad = Math.PI / 180;
     let dx = (out.x - pv.x) * G.scale, dy = (out.y - pv.y) * G.scale, dz = out.z * G.scale;
@@ -161,7 +180,7 @@ export function itemState(project: Project, item: Item, t: Seconds): ItemState {
     if (gpl && gpar) {
       depth++;
       try {
-        const P = itemState(project, gpar, t), dr = (P.rz - gpl.rz0) * rad, k = P.scale / (gpl.s0 || 1);
+        const P = parentState(project, gpar, t, grp), dr = (P.rz - gpl.rz0) * rad, k = P.scale / (gpl.s0 || 1);
         const ex = (out.x - gpl.x0) * k, ey = (out.y - gpl.y0) * k;
         out.x = P.x + ex * Math.cos(dr) - ey * Math.sin(dr);
         out.y = P.y + ex * Math.sin(dr) + ey * Math.cos(dr);

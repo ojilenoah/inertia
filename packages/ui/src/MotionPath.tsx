@@ -17,7 +17,7 @@ export function addMotion() {
   });
   select(id);
   setUI({ pathSel: { motionId: id, node: 0 }, pathDraw: null });
-  toast("Path added · drag its node to place it · click + to add nodes (right-click stops)");
+  toast("Path added");
 }
 
 /** A camera for the whole video: its frame is what's shown. Keyframe it to pan, zoom (make the frame smaller) and turn. */
@@ -30,7 +30,7 @@ export function addCamera() {
       base: { x: p.width / 2, y: p.height / 2, z: 0, rx: 0, ry: 0, rz: 0, scale: 1, opacity: 1 }, keys: {} } as Item);
   });
   select(id);
-  toast(`Camera added · move or shrink its frame and add keyframes to pan and zoom · it's hidden while not selected${t ? "" : ""}`);
+  toast(`Camera added${t ? "" : ""}`);
 }
 
 /** The motion whose path should be shown: the selected motion, or the one the selected item follows. */
@@ -234,7 +234,7 @@ export function MotionOverlay({ m, k, t, active }: { m: Item; k: number; t: numb
         <g>
           <rect x={box.x - ho} y={box.y - ho} width={box.w + ho * 2} height={box.h + ho * 2} fill={sel?.whole ? "rgba(0,0,0,0.001)" : "none"} stroke={col} strokeWidth={1.5 / k}
             style={{ pointerEvents: drawing ? "none" : sel?.whole ? "all" : "stroke", cursor: "move" }} onPointerDown={(e) => { if (e.button === 0) dragWhole(e); }}>
-            <title>The whole path · drag to move it with all its nodes · its 3D tilt is in the Rotate card</title>
+            <title>Drag to move the whole path</title>
           </rect>
           {!drawing && <>
             {[[box.x - ho, box.y - ho], [box.x + box.w + ho, box.y - ho], [box.x - ho, box.y + box.h + ho], [box.x + box.w + ho, box.y + box.h + ho]].map(([x, y], n) => (
@@ -243,7 +243,7 @@ export function MotionOverlay({ m, k, t, active }: { m: Item; k: number; t: numb
             ))}
             <line x1={box.x + box.w / 2} y1={box.y - ho} x2={box.x + box.w / 2} y2={box.y - ho - 26 / k} stroke={col} strokeWidth={1.5 / k} />
             <circle className="mnode" cx={box.x + box.w / 2} cy={box.y - ho - 32 / k} r={6 / k} fill={col} stroke="#fff" strokeWidth={2 / k} style={{ pointerEvents: "auto", cursor: "grab" }} onPointerDown={downRot}>
-              <title>Turn the path (Shift: 15° steps) · tilt it in 3D from the Rotate card</title>
+              <title>Turn the path (Shift: 15°)</title>
             </circle>
           </>}
         </g>
@@ -265,7 +265,7 @@ export function MotionOverlay({ m, k, t, active }: { m: Item; k: number; t: numb
                 st0().edit((p) => { const mm = p.items.find((q) => q.id === m.id); if (mm) n = penSplitLine(mm, i, at); });
                 if (n >= 0) pick({ motionId: m.id, node: n });
               }}>
-              <title>Click to bend this line · right-click to add a node here · Ctrl-click to move the whole path</title>
+              <title>Click to bend · right-click to add a node</title>
             </path>
           </g>
         );
@@ -305,7 +305,7 @@ export function MotionOverlay({ m, k, t, active }: { m: Item; k: number; t: numb
               }, "Delete", true, mid ? [{ label: smooth ? "Make sharp" : "Make smooth", hint: smooth ? "A corner again" : "The line curves smoothly through this node",
                 run: () => st0().edit((p) => { const mm = p.items.find((q) => q.id === m.id); if (mm) setNodeSmooth(mm, n, !smooth); }) }] : undefined);
             }}>
-            <title>{n === 0 ? "Start node" : nd.key ? `Node at ${nd.t.toFixed(2)}s` : "End node"} · drag to move · click for its turn knob and + · right-click to delete · Ctrl-click to move the whole path</title>
+            <title>{n === 0 ? "Start node" : nd.key ? `Node at ${nd.t.toFixed(2)}s` : "End node"} · right-click to delete</title>
           </circle>
         );
       })}
@@ -316,11 +316,11 @@ export function MotionOverlay({ m, k, t, active }: { m: Item; k: number; t: numb
         return (
           <g>
             <line x1={x} y1={y} x2={kx} y2={ky} stroke={col} strokeWidth={sw * 0.7} />
-            <circle className="mnode" cx={kx} cy={ky} r={6 / k} fill="#fff" stroke={col} strokeWidth={sw} style={{ pointerEvents: "auto", cursor: "grab" }} onPointerDown={(e) => downTurn(e, sel.node!)}><title>Turn: anything following the path turns this much here (Shift: 15° steps)</title></circle>
+            <circle className="mnode" cx={kx} cy={ky} r={6 / k} fill="#fff" stroke={col} strokeWidth={sw} style={{ pointerEvents: "auto", cursor: "grab" }} onPointerDown={(e) => downTurn(e, sel.node!)}><title>Turn here (Shift: 15°)</title></circle>
             <g className="mnode" style={{ pointerEvents: "auto", cursor: "pointer" }} onPointerDown={(e) => startAdding(e, sel.node!)}>
               <circle cx={px} cy={y} r={9 / k} fill={col} />
               <path d={`M${px - 4.5 / k} ${y}H${px + 4.5 / k}M${px} ${y - 4.5 / k}V${y + 4.5 / k}`} stroke="#fff" strokeWidth={sw} strokeLinecap="round" />
-              <title>Add nodes after this one: click where each goes · right-click to stop</title>
+              <title>Add nodes after this one</title>
             </g>
           </g>
         );
@@ -355,7 +355,7 @@ export function PathDrawLayer({ k, stage }: { k: number; stage: React.RefObject<
   const go = (i: number) => {
     if (!m || !draw) return;
     const b = motionBlocks(m);
-    if (pen || i >= b.length) { setUI({ pathDraw: null }); toast("Path done · drag its nodes and handles to adjust · double-click a node to make it smooth or sharp"); return; }
+    if (pen || i >= b.length) { setUI({ pathDraw: null }); toast("Path done"); return; }
     setUI({ pathDraw: { motionId: m.id, block: i, pen: false } });
     setT(m.start + b[i][0]);
   };
@@ -448,7 +448,7 @@ export function PathDrawLayer({ k, stage }: { k: number; stage: React.RefObject<
           checkpoint();
           edit((p) => { const mm = p.items.find((i) => i.id === m.id); if (mm) setStroke(mm, blk[0], blk[1], raw); }, false);
           // one line from start to end: done (add keyframes later for more nodes)
-          if (blocks.length === 1) { setUI({ pathDraw: null }); toast("Path drawn · drag its nodes to adjust · add keyframes on it for more nodes"); }
+          if (blocks.length === 1) { setUI({ pathDraw: null }); toast("Path drawn"); }
         }} />
       {(live || preview) && (
         <svg className="mpath live" width="100%" height="100%" style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "visible" }}>
