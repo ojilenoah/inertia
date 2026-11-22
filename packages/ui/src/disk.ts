@@ -11,6 +11,8 @@ import { BaseDirectory, exists, mkdir, readDir, readFile, readTextFile, remove, 
 
 export type DiskState =
   | { kind: "app"; where: string }
+  /** the desktop app, first start: the person picks where projects go (until then they're kept in the app only) */
+  | { kind: "choose" }
   | { kind: "server"; where: string }
   | { kind: "folder"; name: string }
   | { kind: "needs-permission"; name: string }
@@ -31,16 +33,80 @@ const isApp = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in wi
 const fileOf = (id: string) => `${id}.moshion`;
 const serialize = (p: Project, updated: number) => JSON.stringify({ moshion: 1, updated, savedAt: new Date(updated).toISOString(), project: p });
 
-/* ---------------- desktop / mobile app ---------------- */
+/* ---------------- desktop / mobile app ----------------
+ * Desktop: a folder the person chose (asked once, on first start; Documents/Inertia Projects is offered first),
+ * stored as a full path. Phones (Android): Documents/Inertia Projects inside what the app may use, else its data folder.
+ */
 let base: BaseDirectory = BaseDirectory.Document;
-const APPDIR = "Moshion Projects";
+const APPDIR = "Inertia Projects";
+/** The old name's folder: offered for bringing projects in on first start. */
+const OLD_APPDIR = "Moshion Projects";
+const FOLDER_KEY = "inertia.folder";
+/** Desktop app: the chosen folder (full path); "" while using a base folder (phones). */
+let root = "";
+const isMobileApp = () => /Android|iPhone|iPad/i.test(navigator.userAgent);
+export const isDesktopApp = () => isApp() && !isMobileApp();
+/** A path inside the projects folder, and the options to reach it. */
+const at = (rel = "") => (root ? (rel ? `${root}/${rel}` : root) : rel ? `${APPDIR}/${rel}` : APPDIR);
+const opt = () => (root ? undefined : { baseDir: base });
+async function useFolder(path: string) {
+  await mkdir(`${path}/media`, { recursive: true });
+  root = path;
+  setState({ kind: "app", where: path });
+}
 async function appInit() {
-  try { await mkdir(`${APPDIR}/media`, { baseDir: base, recursive: true }); setState({ kind: "app", where: "Documents/Moshion Projects" }); }
+  if (isDesktopApp()) {
+    let saved: string | null = null;
+    try { saved = localStorage.getItem(FOLDER_KEY); } catch { /* storage unavailable */ }
+    if (!saved) { setState({ kind: "choose" }); return; }
+    try { await useFolder(saved); } catch { setState({ kind: "choose" }); } // gone or not allowed any more: ask again
+    return;
+  }
+  try { await mkdir(`${APPDIR}/media`, { baseDir: base, recursive: true }); setState({ kind: "app", where: "Documents/Inertia Projects" }); }
   catch {
     base = BaseDirectory.AppData;
     await mkdir(`${APPDIR}/media`, { baseDir: base, recursive: true });
-    setState({ kind: "app", where: "the app's data folder" });
+    setState({ kind: "app", where: "the app's own storage" });
   }
+}
+/** Desktop app: Documents/Inertia Projects (the suggested place). */
+export async function defaultAppFolder() {
+  const { documentDir, join } = await import("@tauri-apps/api/path");
+  return join(await documentDir(), APPDIR);
+}
+/** Desktop app: let the person pick a folder (null if they cancel). */
+export async function pickAppFolder(): Promise<string | null> {
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const { documentDir } = await import("@tauri-apps/api/path");
+  // recursive: the folder's contents (and media/) become reachable too
+  const p = await open({ directory: true, multiple: false, recursive: true, title: "Where should Inertia save your projects?", defaultPath: await documentDir() });
+  return typeof p === "string" ? p : null;
+}
+/** Desktop app: save projects in this folder from now on. */
+export async function setAppFolder(path: string) {
+  await useFolder(path);
+  try { localStorage.setItem(FOLDER_KEY, path); } catch { /* storage unavailable */ }
+  return state;
+}
+/** Projects in the old "Moshion Projects" folder (Documents), to bring in on first start. */
+export async function oldFolderProjects(): Promise<{ project: Project; updated: number }[]> {
+  if (!isApp()) return [];
+  const out: { project: Project; updated: number }[] = [];
+  try {
+    for (const e of await readDir(OLD_APPDIR, { baseDir: BaseDirectory.Document })) {
+      if (!e.isFile || !e.name.endsWith(".moshion")) continue;
+      try {
+        const d = JSON.parse(await readTextFile(`${OLD_APPDIR}/${e.name}`, { baseDir: BaseDirectory.Document }));
+        const project: Project = d.project ?? d;
+        if (!d.deleted && project?.items && project?.tracks && project.id) out.push({ project, updated: +d.updated || Date.parse(d.savedAt) || Date.now() });
+      } catch { /* not a project */ }
+    }
+  } catch { /* no old folder */ }
+  return out;
+}
+/** A media file kept in the old folder (copied along when projects are brought in). */
+export async function readOldMedia(id: string): Promise<Uint8Array | null> {
+  try { return await readFile(`${OLD_APPDIR}/media/${id}`, { baseDir: BaseDirectory.Document }); } catch { return null; }
 }
 
 /* ---------------- browser folder (File System Access) ---------------- */
@@ -113,7 +179,7 @@ export async function writeProject(p: Project, updated = Date.now()) {
   if (!diskReady()) return;
   const text = serialize(p, updated);
   if (state.kind === "server") { await fetch(`/__moshion/project/${encodeURIComponent(p.id)}`, { method: "PUT", body: text }); return; }
-  if (state.kind === "app") await writeTextFile(`${APPDIR}/${fileOf(p.id)}`, text, { baseDir: base });
+  if (state.kind === "app") await writeTextFile(at(fileOf(p.id)), text, opt());
   else await writeTo(dir!, fileOf(p.id), text);
 }
 /**
@@ -124,7 +190,7 @@ export async function deleteProjectFile(id: string) {
   if (!diskReady()) return;
   const text = JSON.stringify({ moshion: 1, deleted: true, updated: Date.now(), project: { id } });
   if (state.kind === "server") { await fetch(`/__moshion/project/${encodeURIComponent(id)}`, { method: "PUT", body: text }); return; }
-  if (state.kind === "app") { await writeTextFile(`${APPDIR}/${fileOf(id)}`, text, { baseDir: base }); return; }
+  if (state.kind === "app") { await writeTextFile(at(fileOf(id)), text, opt()); return; }
   await writeTo(dir!, fileOf(id), text);
 }
 void remove; void exists;
@@ -143,7 +209,7 @@ export async function readAllProjects(): Promise<{ project: Project; updated: nu
     const list = (await (await fetch("/__moshion/projects", { cache: "no-store" })).json()) as unknown[];
     for (const d of list) parse(JSON.stringify(d));
   } else if (state.kind === "app") {
-    for (const e of await readDir(APPDIR, { baseDir: base })) if (e.isFile && e.name.endsWith(".moshion")) parse(await readTextFile(`${APPDIR}/${e.name}`, { baseDir: base }));
+    for (const e of await readDir(at(), opt())) if (e.isFile && e.name.endsWith(".moshion")) parse(await readTextFile(at(e.name), opt()));
   } else {
     for await (const h of dir!.values()) if (h.kind === "file" && h.name.endsWith(".moshion")) parse(await (await (h as FileSystemFileHandle).getFile()).text());
   }
@@ -153,8 +219,8 @@ export async function writeMedia(id: string, blob: Blob) {
   if (!diskReady()) return;
   if (state.kind === "server") { await fetch(`/__moshion/media/${encodeURIComponent(id)}`, { method: "PUT", body: blob }); return; }
   if (state.kind === "app") {
-    const path = `${APPDIR}/media/${id}`;
-    if (!(await exists(path, { baseDir: base }))) await writeFile(path, new Uint8Array(await blob.arrayBuffer()), { baseDir: base });
+    const path = at(`media/${id}`);
+    if (!(await exists(path, opt()))) await writeFile(path, new Uint8Array(await blob.arrayBuffer()), opt());
   } else {
     const m = await sub("media");
     try { await m.getFileHandle(id); } catch { await writeTo(m, id, blob); }
@@ -164,7 +230,7 @@ export async function readMedia(id: string, type = ""): Promise<Blob | null> {
   if (!diskReady()) return null;
   try {
     if (state.kind === "server") { const r = await fetch(`/__moshion/media/${encodeURIComponent(id)}`, { cache: "no-store" }); return r.ok ? new Blob([await r.arrayBuffer()], { type }) : null; }
-    if (state.kind === "app") return new Blob([await readFile(`${APPDIR}/media/${id}`, { baseDir: base })], { type });
+    if (state.kind === "app") return new Blob([await readFile(at(`media/${id}`), opt())], { type });
     const m = await sub("media");
     return await (await m.getFileHandle(id)).getFile();
   } catch { return null; }

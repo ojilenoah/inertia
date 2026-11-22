@@ -1357,3 +1357,20 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .phgrab { position: absolute; top: 22px; bottom: 0; left: -5px; width: 10px; pointer-events: auto; cursor: ew-resize; touch-action: none; }
 .mo.phone .phgrab { top: 16px; }
 @media (any-pointer: coarse) { .phgrab { left: -11px; width: 22px; } }
+/* first start (desktop app): where projects are kept */
+.fsetup { width: min(420px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 10px; }
+.fsnote { margin: 0; font: 400 12.5px/1.5 var(--sans); color: var(--ink-2); }
+.fsopt { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 10px; background: var(--panel-2); text-align: left; }
+.fsopt:hover:not(:disabled) { background: var(--panel-3); }
+.fsopt.rec { background: color-mix(in srgb, var(--brand, #E0571A) 14%, var(--panel-2)); }
+.fsopt span { display: flex; flex-direction: column; gap: 2px; }
+.fsopt b { font: 600 13px var(--sans); }
+.fsopt small { font: 400 11.5px var(--sans); color: var(--ink-3); }
+.fsopt:disabled { opacity: .6; }
+.fsbring { display: flex; align-items: center; gap: 8px; font: 500 12px var(--sans); color: var(--ink-2); }
+.hsaved .hlink { margin-left: 6px; }
+/* narrow screens: the saving note gets a line of its own under the logo */
+@media (max-width: 560px) {
+  .htop { flex-wrap: wrap; row-gap: 6px; }
+  .hdisk { order: 3; width: 100%; margin-right: 0; }
+}

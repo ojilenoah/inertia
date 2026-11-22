@@ -176,3 +176,47 @@ export function startLibrarySync() {
     timer = setTimeout(() => { if (useStore.getState().ui.view !== "home") putProject(last).catch(() => {}); }, 800);
   });
 }
+
+/** First start of the desktop app: copy the projects (and their media) from the old "Moshion Projects" folder in. */
+export async function bringInOldProjects(): Promise<number> {
+  const { oldFolderProjects, readOldMedia } = await import("./disk");
+  const old = await oldFolderProjects();
+  const lib = await listProjects();
+  let n = 0;
+  for (const o of old) {
+    const e = lib.find((x) => x.id === o.project.id);
+    if (e && e.updated >= o.updated) continue; // already here and newer
+    await putProject(o.project, true, o.updated); n++;
+    for (const a of o.project.assets ?? []) {
+      if (a.kind === "image" || (await mediaBlob(a.id))) continue;
+      const bytes = await readOldMedia(a.id);
+      if (bytes) await putMediaBlob(a.id, new Blob([bytes as BlobPart], { type: a.kind === "video" ? "video/*" : "audio/*" })).catch(() => {});
+    }
+  }
+  return n;
+}
+
+/** Every project in one file, to keep somewhere safe (phones: the only copy may be in the browser). Media files stay out. */
+export async function backupAll() {
+  const lib = (await listProjects()).filter((e) => !isPristineDemo(e.project));
+  const data = JSON.stringify({ inertiaBackup: 1, savedAt: new Date().toISOString(), projects: lib.map((e) => ({ updated: e.updated, project: e.project })) });
+  const blob = new Blob([data], { type: "application/json" });
+  const name = `Inertia backup ${new Date().toISOString().slice(0, 10)}.json`;
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  return lib.length;
+}
+/** Bring every project in a backup file back (a newer copy already here is kept). */
+export async function restoreBackup(data: { projects?: { updated?: number; project: Project }[] }): Promise<number> {
+  const lib = await listProjects();
+  let n = 0;
+  for (const x of data.projects ?? []) {
+    const p = x.project;
+    if (!p?.id || !p.items || !p.tracks) continue;
+    const e = lib.find((q) => q.id === p.id);
+    if (e && e.updated >= (x.updated ?? 0)) continue;
+    deleted.delete(p.id);
+    await putProject(p, true, x.updated ?? Date.now()); n++;
+  }
+  return n;
+}

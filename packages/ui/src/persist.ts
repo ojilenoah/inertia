@@ -87,7 +87,8 @@ export async function saveProject(saveAs = false) {
   }
 }
 
-export async function openProject() {
+/** Open a project file (or a backup of every project). Says which, or null if nothing was opened. */
+export async function openProject(): Promise<"project" | "backup" | null> {
   const s = useStore.getState();
   const w = window as unknown as { showOpenFilePicker?: (o: object) => Promise<(FileHandle & { getFile(): Promise<File> })[]> };
   try {
@@ -104,13 +105,22 @@ export async function openProject() {
       });
     }
     const data = JSON.parse(await file.text());
+    if (data?.inertiaBackup) {
+      // a backup of every project: bring them all back into the list
+      const { restoreBackup } = await import("./library");
+      const n = await restoreBackup(data);
+      s.toast(n ? `${n} project${n === 1 ? "" : "s"} restored from the backup` : "Everything in that backup is already here");
+      return "backup";
+    }
     const project: Project = data.project ?? data;
     if (!project?.items || !project?.tracks) throw new Error("not an Inertia project");
     project.effects ??= [];
     useStore.setState({ project, savedProject: project, past: [], pastTimes: [], future: [], selected: null, t: 0 });
     s.toast(`Opened ${file.name}`);
+    return "project";
   } catch (e) {
     if ((e as Error).name !== "AbortError") s.toast("Couldn't open: " + (e as Error).message);
+    return null;
   }
 }
 
