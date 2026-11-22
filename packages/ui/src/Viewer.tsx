@@ -8,7 +8,7 @@ import { ChartView, ParticlesView } from "./newitems";
 import { BoardPlane, fitCam, useStills, type Cam } from "./Board";
 import { itemFxFilter, keyTimes, letterColors, numAt, pathPivot, pathTransform, resolveItem, setNum } from "@moshion/engine";
 import { subLine } from "@moshion/engine";
-import { arrowHeads, dashArray, fxOpt, hexA, setText } from "@moshion/engine";
+import { arrowHeads, dashArray, fxOpt, hexA, roundCorners, setText } from "@moshion/engine";
 import type { SceneEffect } from "@moshion/engine";
 import type { MorphChar } from "@moshion/engine";
 import { groupOf, groupValues, itemState, itemsInGroup, ownValue, pieceFx, setValue, splitPieces, textAnimOf, textUnit } from "@moshion/engine";
@@ -22,6 +22,7 @@ import { placeAsset, useMediaSync, useMediaURL } from "./media";
 import { GridButton, GridOverlay } from "./Grid";
 import { MotionOverlay, PathDrawLayer, shownMotion } from "./MotionPath";
 import { LineDrawLayer } from "./Shapes";
+import { LineEditor } from "./LineEdit";
 import { hollowParts, itemShapeD } from "./shapeMorph";
 import { depthStep, itemOutline, lookShadows, maskClipPath, maskFollowers, maskItems, maskOf, mul6, pathGlyphs, pathOffsetAt, repeatCopies, textLetters, textMaskOf, toItemBox, worldToItem, type Glyph } from "./extras";
 
@@ -451,10 +452,15 @@ function fxStyle(f: SceneEffect, k: number, t: number): React.CSSProperties {
   return { opacity: op };
 }
 
+/** Board view: a locked item drawn clipped to its canvas card. */
+function BoardClip({ children }: { children?: React.ReactNode }) {
+  return <div className="bclip">{children}</div>;
+}
+
 /** A drawn line: dashed or dotted, with arrowheads, drawn on as "draw" goes from 0 to 1. */
 function LineSvg({ item }: { item: Item }) {
   const l = item.line!;
-  const px = l.pts.map(([u, v]) => [(u + 0.5) * item.w, (v + 0.5) * item.h] as [number, number]);
+  const px = roundCorners(l.pts.map(([u, v]) => [(u + 0.5) * item.w, (v + 0.5) * item.h] as [number, number]), l.round ?? 0);
   const pts = subLine(px, item.look?.drawStart ?? 0, Math.max(0, Math.min(1, item.look?.draw ?? 1)));
   const dash = dashArray(l);
   return (
@@ -575,6 +581,8 @@ export function Viewer() {
   const vcam = camNow && camNow.id !== selected ? camNow : null;
   const camZoom = vcam ? 1 / vcam.scale : 1;
   const camCSS = vcam ? `rotate(${-vcam.rz}deg) scale(${camZoom}) translate(${project.width / 2 - vcam.x}px, ${project.height / 2 - vcam.y}px)` : "";
+  // the canvas's own movement (camera, 3D view, looks like shake): items and their selection boxes both follow it
+  const innerTransform = [camCSS, orbit ? "perspective(2400px) rotateY(-22deg) rotateX(10deg) scale(.82)" : "", looksTransform(project, t).transform ?? ""].join(" ").trim() || "none";
   const masks = maskItems(project);
 
   // text items size themselves to their content, so the selection box always fits the text
@@ -1122,7 +1130,7 @@ export function Viewer() {
             }}
           >
            <BackgroundLayer project={project} t={t} />
-           <div style={{ position: "absolute", inset: 0, transformStyle: "flat", transform: [camCSS, orbit ? "perspective(2400px) rotateY(-22deg) rotateX(10deg) scale(.82)" : "", looksTransform(project, t).transform ?? ""].join(" ").trim() || "none", filter: [project.canvasFx?.some((f) => !f.off && f.amount > 0) ? "url(#fxi-canvas)" : "", looksTransform(project, t).filter ?? ""].join(" ").trim() || undefined, transition: orbit ? "transform .5s cubic-bezier(.2,.8,.2,1)" : undefined }}>
+           <div style={{ position: "absolute", inset: 0, transformStyle: "flat", transform: innerTransform, filter: [project.canvasFx?.some((f) => !f.off && f.amount > 0) ? "url(#fxi-canvas)" : "", looksTransform(project, t).filter ?? ""].join(" ").trim() || undefined, transition: orbit ? "transform .5s cubic-bezier(.2,.8,.2,1)" : undefined }}>
             {stackAtTime(project, t, items).map(({ it, alpha, ghost }) => {
               const tt = preview?.itemId === it.id ? preview.t : t;
               const s0 = itemState(project, it, tt);
@@ -1137,8 +1145,10 @@ export function Viewer() {
               if (ghost) return path
                 ? <TextOnPath key={it.id + "~layer"} item={resolveItem(it, tt - it.start)} s={s} g={path} />
                 : <ItemView key={it.id + "~layer"} item={{ ...it, id: `${it.id}~layer` }} s={s} local={tt - it.start} editing={false} cropping={false} extra={{ clipPath: clip, pointerEvents: "none" }} />;
+              // on the board a locked item stays inside its canvas card (nothing of it spills over the edge)
+              const Wrap = board && itemLocked(project, it) ? BoardClip : Fragment;
               return (
-                <Fragment key={it.id}>
+                <Wrap key={it.id}>
                   {/* repeater copies, behind the item */}
                   {!path && repeatCopies(project, it, tt).map((c) => <ItemView key={`${it.id}~r${c.i}`} item={{ ...it, id: `${it.id}~r${c.i}` }} s={c.s} local={c.t - it.start} editing={false} cropping={false} extra={{ pointerEvents: "none", clipPath: clip }} />)}
                   {!!it.motionBlur && !path && blurTrail(project, it, tt).map((b) => (
@@ -1148,7 +1158,7 @@ export function Viewer() {
                   <TextMaskDefs project={project} item={it} s={s} t={tt} />
                   <ItemView item={it} s={onPathBox(project, it, s, path)} local={tt - it.start} editing={ui.editingText === it.id} cropping={ui.cropping === it.id} extra={{ clipPath: clip, ...(textMaskOf(project, it, tt) ? { maskImage: `url(#tmask-${it.id})`, WebkitMaskImage: `url(#tmask-${it.id})` } : {}), ...(path ? { opacity: 0 } : {}) }} />
                   {path && <TextOnPath item={resolveItem(it, tt - it.start)} s={s} g={path} />}
-                </Fragment>
+                </Wrap>
               );
             })}
             {/* onion skin: the selected item at its previous and next keyframes */}
@@ -1193,34 +1203,6 @@ export function Viewer() {
               );
             })()}
             <LookOverlays project={project} t={t} />
-            {ui.multi.filter((id) => id !== selected).map((id) => {
-              const it = project.items.find((i) => i.id === id);
-              const ms = it && itemState(project, it, t);
-              if (!it || !ms?.visible) return null;
-              return <div key={id} className="selbox multi" style={{ left: ms.x - it.w / 2, top: ms.y - it.h / 2, width: it.w, height: it.h, transform: xf(ms), borderRadius: it.kind === "ellipse" || it.kind === "glass" ? "50%" : it.radius ?? 0 }} />;
-            })}
-            {sel && sel.kind !== "motion" && selState?.visible && ui.cropping !== sel.id && (
-              <div
-                className="selbox"
-                style={{
-                  left: selState.x - sel.w / 2, top: selState.y - sel.h / 2, width: sel.w, height: sel.h,
-                  transform: xf(selState),
-                  borderRadius: sel.kind === "ellipse" || sel.kind === "glass" ? "50%" : sel.kind === "text" ? (sel.textBg ? sel.radius ?? 0 : 0) : sel.radius ?? 0,
-                  // the box is scaled with the item: undo that for its lines and handles
-                  ["--k" as string]: k * Math.max(0.02, Math.abs(selState.scale)),
-                }}
-              >
-                {["nw", "ne", "sw", "se"].map((c) => <i key={c} className={c} title="Drag to resize · keeps the shape (Shift: free)" onPointerDown={(e) => startResize(e, c)} />)}
-                {(sel.kind === "text" ? ["e", "w"] : ["n", "s", "e", "w"]).map((c) => <i key={c} className={"edge " + c} title={sel.kind === "text" ? "Drag to set the text width" : "Drag to stretch this side (Alt: both sides)"} onPointerDown={(e) => startResize(e, c)} />)}
-                <span className="rot" title="Drag to rotate · snaps to 15° steps (Shift locks, Ctrl turns snapping off)" onPointerDown={startRotate} />
-                <button className={"knob" + (ui.mode3d ? " on" : "")} title={ui.mode3d ? "Back to 2D" : "Switch to 3D: rotate on every axis with the gimbal"}
-                  style={undefined}
-                  onPointerDown={(e) => { e.stopPropagation(); setUI({ mode3d: !ui.mode3d }); }}>
-                  <Icon name={ui.mode3d ? "rect" : "cube"} size={16} />
-                </button>
-
-              </div>
-            )}
            </div>
           </div>
           {mbox && !selGroupTrack && (
@@ -1275,6 +1257,46 @@ export function Viewer() {
             const all = project.items.filter((i) => i.kind === "motion" && (i.id === act?.id || (t >= i.start && t <= i.end && !itemHidden(project, i))));
             return all.length ? <div className="pathlayer" style={{ width: project.width, height: project.height, transform: `scale(${k})` }}>{all.map((mm) => <MotionOverlay key={mm.id} m={mm} k={k} t={t} active={mm.id === act?.id} />)}</div> : null;
           })()}
+          {/* selection boxes: above the canvas's looks and screen effects (blur, tint, grain, lens blur never touch them),
+              moving with the canvas exactly like the items do */}
+          <div className="selworld" style={{ width: project.width, height: project.height, transform: `scale(${k})`, ["--k" as string]: k }}>
+           <div style={{ position: "absolute", inset: 0, transformStyle: "flat", transform: innerTransform }}>
+            {ui.multi.filter((id) => id !== selected).map((id) => {
+              const it = project.items.find((i) => i.id === id);
+              const ms = it && itemState(project, it, t);
+              if (!it || !ms?.visible) return null;
+              return <div key={id} className="selbox multi" style={{ left: ms.x - it.w / 2, top: ms.y - it.h / 2, width: it.w, height: it.h, transform: xf(ms), borderRadius: it.kind === "ellipse" || it.kind === "glass" ? "50%" : it.radius ?? 0 }} />;
+            })}
+            {sel && sel.kind !== "motion" && selState?.visible && ui.cropping !== sel.id && (
+              <div
+                className="selbox"
+                style={{
+                  left: selState.x - sel.w / 2, top: selState.y - sel.h / 2, width: sel.w, height: sel.h,
+                  transform: xf(selState),
+                  borderRadius: sel.kind === "ellipse" || sel.kind === "glass" ? "50%" : sel.kind === "text" ? (sel.textBg ? sel.radius ?? 0 : 0) : sel.radius ?? 0,
+                  // the box is scaled with the item: undo that for its lines and handles
+                  ["--k" as string]: k * Math.max(0.02, Math.abs(selState.scale)),
+                }}
+              >
+                {["nw", "ne", "sw", "se"].map((c) => <i key={c} className={c} title="Drag to resize · keeps the shape (Shift: free)" onPointerDown={(e) => startResize(e, c)} />)}
+                {(sel.kind === "text" ? ["e", "w"] : ["n", "s", "e", "w"]).map((c) => <i key={c} className={"edge " + c} title={sel.kind === "text" ? "Drag to set the text width" : "Drag to stretch this side (Alt: both sides)"} onPointerDown={(e) => startResize(e, c)} />)}
+                <span className="rot" title="Drag to rotate · snaps to 15° steps (Shift locks, Ctrl turns snapping off)" onPointerDown={startRotate} />
+                <button className={"knob" + (ui.mode3d ? " on" : "")} title={ui.mode3d ? "Back to 2D" : "Switch to 3D: rotate on every axis with the gimbal"}
+                  style={undefined}
+                  onPointerDown={(e) => { e.stopPropagation(); setUI({ mode3d: !ui.mode3d }); }}>
+                  <Icon name={ui.mode3d ? "rect" : "cube"} size={16} />
+                </button>
+
+              </div>
+            )}
+           </div>
+          </div>
+          {/* a selected line: its points, to drag, add and delete */}
+          {sel?.kind === "line" && !ui.lineTool && ui.multi.length < 2 && (
+            <div className="pathlayer linelayer" style={{ width: project.width, height: project.height, transform: `scale(${k})` }}>
+              <LineEditor project={project} item={sel} t={t} k={k} />
+            </div>
+          )}
           <div className="aidlayer" style={{ width: project.width, height: project.height, transform: `scale(${k})`, ["--k" as string]: k }}>
             <GridOverlay project={project} k={k} />
             {guides.v != null && <div className="guide" style={{ left: guides.v, top: 0, bottom: 0, width: 2 }} />}

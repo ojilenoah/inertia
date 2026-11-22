@@ -66,7 +66,7 @@ export function CanvasMenu() {
           <div className="cm-head">{it.name}</div>
           <div className="cm-secs">
             {sectionsFor(it, !!groupOf(project, it)).map((sec) => (
-              <button key={sec.id} title={sec.label} onClick={() => { useStore.getState().select(it.id); setUI({ ctx: null, panel: { section: sec.id, itemId: it.id, x: ctx.x, y: ctx.y } }); }}>
+              <button key={sec.id} title={sec.label} onClick={() => { useStore.getState().select(it.id); setUI({ ctx: null, panel: { section: sec.id, itemId: it.id, x, y, fromMenu: true } }); }}>
                 <Icon name={sec.icon} />
               </button>
             ))}

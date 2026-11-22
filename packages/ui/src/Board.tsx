@@ -164,14 +164,11 @@ export function BoardPlane({ project, cam, setCam, size, live }: { project: Proj
         if (e.button !== 0 && e.button !== 1) return;
         if (e.target !== e.currentTarget) return;
         useStore.getState().select(null);
-        const x0 = e.clientX, y0 = e.clientY, c0 = cam, el = e.currentTarget;
+        const x0 = e.clientX, y0 = e.clientY, c0 = cam;
         let moved = false;
         const mv = (ev: PointerEvent) => { if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) return; moved = true; setCam({ ...c0, x: c0.x - (ev.clientX - x0) / c0.z, y: c0.y - (ev.clientY - y0) / c0.z }); };
-        const up = (ev: PointerEvent) => {
-          removeEventListener("pointermove", mv); removeEventListener("pointerup", up);
-          // a click (not a drag) on empty board opens the board menu
-          if (!moved && e.button === 0) setMenu({ x: ev.clientX, y: ev.clientY, ...toBoard(ev, el) });
-        };
+        // dragging empty board pans it; the board menu opens on right-click (a long press on phones), not on a click or tap
+        const up = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); };
         addEventListener("pointermove", mv); addEventListener("pointerup", up);
       }} />
     {/* the other canvases sit above the live one's faded surroundings, so they're never dimmed */}

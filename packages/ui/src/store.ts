@@ -53,7 +53,9 @@ export interface UIState {
   mode3d: boolean;
   /** The edit panel opened from the floating bar (or a track header). */
   /** `anchor`: the top/bottom of what opened it (the bar over a clip); the card opens above it. */
-  panel: { section: PanelSection; itemId: string | null; trackId?: string; bgId?: string; fxId?: string; canvas?: boolean; x: number; y: number; anchor?: { top: number; bottom: number } } | null;
+  panel: { section: PanelSection; itemId: string | null; trackId?: string; bgId?: string; fxId?: string; canvas?: boolean; x: number; y: number; anchor?: { top: number; bottom: number };
+    /** opened from the item's popup menu (phones: the card opens right where the menu was) */
+    fromMenu?: boolean } | null;
   /** Loop an item's In / Out / Throughout animation on the canvas while picking it. */
   animPreview: { itemId: string; slot: "in" | "out" | "loop" | "tin" | "tout" | "tloop" } | null;
   /** Right-click menu on the canvas (stacking order etc.). */

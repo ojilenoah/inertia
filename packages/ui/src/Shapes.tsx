@@ -8,6 +8,7 @@ import { addChart, addParticles, importSVG } from "./newitems";
 import { useStore } from "./store";
 import { Icon } from "./Icon";
 import { addItem, inkFor } from "./Panels";
+import { snapAngle } from "./LineEdit";
 
 /** A small picture of a shape. */
 export function ShapeIcon({ spec }: { spec: ShapeSpec }) {
@@ -84,11 +85,6 @@ export function LineDrawLayer({ k, stage }: { k: number; stage: React.RefObject<
     const r = stage.current!.getBoundingClientRect();
     return [(e.clientX - r.left) / k, (e.clientY - r.top) / k];
   };
-  const straight = (a: [number, number], b: [number, number], snap: boolean): [number, number] => {
-    if (!snap) return b;
-    const ang = Math.round(Math.atan2(b[1] - a[1], b[0] - a[0]) / (Math.PI / 12)) * (Math.PI / 12), len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    return [a[0] + Math.cos(ang) * len, a[1] + Math.sin(ang) * len];
-  };
   const finish = () => {
     let raw = pts.current; pts.current = []; setLive(null);
     if (raw.length < 2) return;
@@ -118,7 +114,7 @@ export function LineDrawLayer({ k, stage }: { k: number; stage: React.RefObject<
         onPointerMove={(e) => {
           if (!pts.current.length) return;
           const p = toWorld(e);
-          if (tool === "line") pts.current = [pts.current[0], straight(pts.current[0], p, e.shiftKey)]; else pts.current.push(p);
+          if (tool === "line") pts.current = [pts.current[0], snapAngle(pts.current[0], p, e)]; else pts.current.push(p);
           setLive([...pts.current]);
         }}
         onPointerUp={finish} />
@@ -127,7 +123,7 @@ export function LineDrawLayer({ k, stage }: { k: number; stage: React.RefObject<
           <path d={live.map(([x, y], i) => `${i ? "L" : "M"}${x * k} ${y * k}`).join("")} fill="none" stroke="var(--sel)" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       )}
-      <div className="pathhint"><b>{tool === "pen" ? "Pen" : "Line"}</b><span>{tool === "pen" ? "drag to draw freehand" : "drag from start to end · Shift: straight angles"}</span><button onClick={() => useStore.getState().setUI({ lineTool: null })}>Esc</button></div>
+      <div className="pathhint"><b>{tool === "pen" ? "Pen" : "Line"}</b><span>{tool === "pen" ? "drag to draw freehand" : "drag from start to end · it snaps to angles (Shift: always, Alt: never)"}</span><button onClick={() => useStore.getState().setUI({ lineTool: null })}>Esc</button></div>
     </>
   );
 }

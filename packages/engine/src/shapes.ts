@@ -149,6 +149,30 @@ export interface LineSpec {
   dash: LineDash;
   arrow: LineArrow;
   cap: "round" | "butt";
+  /** rounded corners where the line bends (px, in the line's own box; 0 = sharp) */
+  round?: number;
+}
+/**
+ * A line with its corners rounded: each bend becomes a smooth curve of radius about `r` (never more than half of
+ * either side it joins). Returns the points to draw (dashes, draw-on and arrows all work on them as usual).
+ */
+export function roundCorners(pts: [number, number][], r: number, steps = 10): [number, number][] {
+  if (!(r > 0) || pts.length < 3) return pts;
+  const out: [number, number][] = [pts[0]];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [ax, ay] = pts[i - 1], [px, py] = pts[i], [bx, by] = pts[i + 1];
+    const d1 = Math.hypot(ax - px, ay - py), d2 = Math.hypot(bx - px, by - py);
+    const rr = Math.min(r, d1 / 2, d2 / 2);
+    if (rr < 0.5) { out.push(pts[i]); continue; }
+    const p1: [number, number] = [px + ((ax - px) / d1) * rr, py + ((ay - py) / d1) * rr];
+    const p2: [number, number] = [px + ((bx - px) / d2) * rr, py + ((by - py) / d2) * rr];
+    for (let s = 0; s <= steps; s++) {
+      const u = s / steps, v = 1 - u;
+      out.push([v * v * p1[0] + 2 * v * u * px + u * u * p2[0], v * v * p1[1] + 2 * v * u * py + u * u * p2[1]]);
+    }
+  }
+  out.push(pts[pts.length - 1]);
+  return out;
 }
 /** Dash pattern (in px) for a line style. */
 export function dashArray(l: LineSpec): number[] {

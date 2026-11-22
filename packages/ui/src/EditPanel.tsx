@@ -95,10 +95,8 @@ const SECTIONS: { id: PanelSection; label: string; icon: string; when?: (it: Ite
   { id: "shape", label: "Shape", icon: "shapes", when: (it) => ["shape", "rect", "ellipse", "star"].includes(it.kind) },
   { id: "line", label: "Line", icon: "line", when: (it) => it.kind === "line" },
   { id: "fill", label: "Fill & border", icon: "frame", when: (it) => !["glass", "text", "line", "chart", "particles"].includes(it.kind) },
-  { id: "transform", label: "Position & size", icon: "move" },
-  { id: "rotate", label: "Rotate · 3D", icon: "cube" },
-  { id: "opacity", label: "Opacity & blend", icon: "drop" },
-  { id: "effects", label: "Effects", icon: "sparkle" },
+  { id: "transform", label: "Position, size & 3D", icon: "move" },
+  { id: "effects", label: "Effects, opacity & blend", icon: "sparkle" },
   { id: "layer", label: "Layer", icon: "side" },
   { id: "mask", label: "Mask: cut it with another item or group, or use it to cut others (text: run it along a path)", icon: "mask", when: (it) => !["audio", "motion", "camera"].includes(it.kind) },
   { id: "group", label: "Group", icon: "group", when: (_it, g) => g },
@@ -108,12 +106,12 @@ const SECTIONS: { id: PanelSection; label: string; icon: string; when?: (it: Ite
   { id: "particles", label: "Particles", icon: "sparkle", when: (it) => it.kind === "particles" },
 ];
 /** A motion clip only has its path and keyframes. */
-const MOTION_SECTIONS: PanelSection[] = ["motion", "transform", "rotate"];
+const MOTION_SECTIONS: PanelSection[] = ["motion", "transform"];
 
 /** The settings cards an item has (for the floating bar and the canvas right-click menu). */
 export function sectionsFor(item: Item, grouped: boolean) {
   if (item.kind === "audio") return SECTIONS.filter((x) => x.id === "media");
-  if (item.kind === "camera") return SECTIONS.filter((x) => x.id === "transform" || x.id === "rotate");
+  if (item.kind === "camera") return SECTIONS.filter((x) => x.id === "transform");
   return SECTIONS.filter((x) => (item.kind === "motion" ? MOTION_SECTIONS.includes(x.id) : !x.when || x.when(item, grouped)));
 }
 
@@ -124,7 +122,9 @@ export function TrackBar() {
   const panel = useStore((x) => x.ui.panel);
   const project = useStore((x) => x.project);
   useStore((x) => x.ui.pps); useStore((x) => x.ui.viewStart); useStore((x) => x.ui.graph); useStore((x) => x.ui.hdrW);
-  const [pos, setPos] = useState<{ x: number; y: number; below: boolean } | null>(null);
+  const [pos, setPos] = useState<{ x: number; y: number; below: boolean; w?: number; h?: number } | null>(null);
+  // phones: the bar sits in the tracks, under the canvas row (scrolls sideways if it doesn't fit)
+  const phoneBar = useStacked();
   const item = project.items.find((i) => i.id === selected);
   const grouped = item ? !!groupOf(project, item) : false;
   const group = !item && selGroup ? project.tracks.find((t) => t.id === selGroup && t.kind === "group") : undefined;
@@ -177,6 +177,15 @@ export function TrackBar() {
 
   useLayoutEffect(() => {
     const place = () => {
+      if (phoneBar) {
+        // phones: in the tracks, in the canvas row's place (that row steps aside while an item is selected)
+        const v = document.querySelector<HTMLElement>(".ws .timeline")?.getBoundingClientRect();
+        const cv = document.querySelector<HTMLElement>(".ws .cvdock")?.getBoundingClientRect();
+        if (!v || (!item && !group)) { setPos(null); return; }
+        const hh = Math.round(cv?.height || 32), x = Math.round(v.left), y = Math.round(cv ? cv.top : v.bottom - hh), w = Math.round(v.width);
+        setPos((p) => (p && p.x === x && p.y === y && p.w === w && p.h === hh ? p : { x, y, below: false, w, h: hh }));
+        return;
+      }
       const clip = item ? document.querySelector<HTMLElement>(`.clip[data-item="${item.id}"]`) : group ? document.querySelector<HTMLElement>(`.gclip[data-group="${group.id}"]`) : null;
       const lanes = document.querySelector<HTMLElement>(".lanes");
       if (!clip || !lanes) { setPos(null); return; }
@@ -199,8 +208,8 @@ export function TrackBar() {
   const tid = item?.id ?? group!.id;
   return (
     <motion.div
-      key={tid} className="fbar" style={{ left: pos.x, top: pos.y, position: "fixed" }}
-      initial={{ opacity: 0, y: pos.below ? -4 : 4, x: "-50%" }} animate={{ opacity: 1, y: 0, x: "-50%" }} transition={{ duration: 0.14 }}
+      key={tid} className={"fbar" + (phoneBar ? " under" : "")} style={{ left: pos.x, top: pos.y, position: "fixed", ...(pos.w ? { width: pos.w } : {}), ...(pos.h ? { height: pos.h } : {}) }}
+      initial={{ opacity: 0, y: pos.below ? -4 : 4, x: phoneBar ? 0 : "-50%" }} animate={{ opacity: 1, y: 0, x: phoneBar ? 0 : "-50%" }} transition={{ duration: 0.14 }}
       onPointerDown={(e) => e.stopPropagation()}
     >
       {secs.map((sec) => (
@@ -776,6 +785,14 @@ export function EditPanel() {
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
   const [animTab, setAnimTab] = useState<"in" | "out" | "loop">("in");
   const [textTab, setTextTab] = useState<"type" | "colour" | "box" | "tricks">("type");
+  // Position card: position & size | 3D · Effects card: effects | opacity & blend
+  const [posTab, setPosTab] = useState<"pos" | "3d">("pos");
+  const [fxTab, setFxTab] = useState<"fx" | "blend">("fx");
+  // opened straight on the part asked for (the old Rotate and Opacity cards open their tab)
+  useEffect(() => {
+    if (panel?.section === "rotate") setPosTab("3d"); else if (panel?.section === "transform") setPosTab("pos");
+    if (panel?.section === "opacity") setFxTab("blend"); else if (panel?.section === "effects") setFxTab("fx");
+  }, [panel?.section, panel?.itemId]);
   const { setUI, edit, toast, select } = st();
 
   useEffect(() => { setDrag(null); }, [panel?.section, panel?.itemId, panel?.trackId]);
@@ -839,8 +856,23 @@ export function EditPanel() {
     maxH = innerHeight - 16; x = fit(panel ? panel.x - W / 2 : 0, W, innerWidth); y = fit(panel ? panel.y : 0, Math.min(h, maxH), innerHeight);
   }
   // phones: the card is a sheet over the tracks, right under the video, so the item being edited stays in sight
-  const sheet = stacked && !drag;
+  const atMenu = stacked && !drag && !!panel?.fromMenu;
+  // opened from the floating bar over the item: the card sits right above that bar (below it if there's no room)
+  const atBar = stacked && !drag && !atMenu && !!panel?.anchor;
+  const sheet = stacked && !drag && !atMenu && !atBar;
   let cardW = W;
+  if (atBar && panel?.anchor) {
+    const a = panel.anchor, room = a.top - 14;
+    cardW = Math.min(W, innerWidth - 16);
+    x = fit(panel.x - cardW / 2, cardW, innerWidth);
+    if (room >= 180) { above = true; maxH = room; y = a.top - 6 - Math.min(h, maxH); }
+    else { above = false; maxH = Math.max(160, innerHeight - a.bottom - 14); y = a.bottom + 6; }
+  }
+  if (atMenu && panel) {
+    // opened from the item's popup menu: the card takes the menu's place
+    cardW = Math.min(W, innerWidth - 16); maxH = innerHeight - 16; above = false;
+    x = fit(panel.x, cardW, innerWidth); y = fit(panel.y, Math.min(h, maxH), innerHeight);
+  }
   if (sheet) {
     const vb = document.querySelector(".ws .viewer")?.getBoundingClientRect().bottom ?? innerHeight * 0.55;
     x = 4; cardW = innerWidth - 8; y = Math.round(vb + 4); maxH = Math.max(160, innerHeight - y - 4); above = false;
@@ -875,7 +907,7 @@ export function EditPanel() {
   );
 
   const titles: Record<PanelSection, string> = {
-    animate: "Animate", text: "Text", fill: "Fill & border", transform: "Position & size", rotate: "Rotate · 3D", motion: "Motion path", shape: "Shape", line: "Line", opacity: "Opacity & blend",
+    animate: "Animate", text: "Text", fill: "Fill & border", transform: "Position, size & 3D", rotate: "Position, size & 3D", motion: "Motion path", shape: "Shape", line: "Line", opacity: "Opacity & blend",
     effects: "Effects", keys: "Keyframes", layer: "Layer", group: "Group", scene: "Canvas", media: "Sound & speed", chart: "Chart", particles: "Particles", mask: "Mask",
   };
 
@@ -1038,6 +1070,8 @@ export function EditPanel() {
             <Row label="Style"><Seg value={l.dash} options={[["solid", "—"], ["dash", "- -"], ["dot", "···"], ["dashdot", "-·-"]]} onChange={(v) => setL((x) => { x.dash = v as LineSpec["dash"]; })} /></Row>
             <Row label="Arrows"><Seg value={l.arrow} options={[["none", "None"], ["end", "→"], ["start", "←"], ["both", "↔"]]} onChange={(v) => setL((x) => { x.arrow = v as LineSpec["arrow"]; })} /></Row>
             <Row label="Ends"><Seg value={l.cap} options={[["round", "Round"], ["butt", "Flat"]]} onChange={(v) => setL((x) => { x.cap = v as LineSpec["cap"]; })} /></Row>
+            <Row label="Corners"><Slider value={l.round ?? 0} min={0} max={300} step={1} fmt={(v) => (v ? `${Math.round(v)}px` : "Sharp")} onChange={(v) => setL((x) => { x.round = v || undefined; }, false)} /></Row>
+            {l.pts.length < 3 && <p className="hint">Corners round where the line bends: add points first (double-click the line, or the + at an end).</p>}
             <div className="psub">Draw on</div>
             <Row label="End"><Slider value={draw} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => setF((it) => { setLook(it, "draw", st().t, v); }, false)} /></Row>
             <Row label="Start"><Slider value={lookAt(item, t - item.start).drawStart} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => setF((it) => { setLook(it, "drawStart", st().t, v); }, false)} /></Row>
@@ -1229,9 +1263,15 @@ export function EditPanel() {
             {!!item.stroke?.width && <Row label="Colour"><Color value={item.stroke.color} onChange={(c) => setF((it) => { it.stroke = { width: it.stroke?.width ?? 2, color: c ?? "#111111" }; }, false)} /></Row>}
           </>
         );
+      case "rotate":
       case "transform":
         return (
           <>
+            <div className="atabs2" role="tablist">
+              {([["pos", "Position & size", "Where it is and how big"], ["3d", "3D", "Turn it in 3D: X, Y and Z"]] as const).map(([k, l, tip]) =>
+                <button key={k} role="tab" className={posTab === k ? "on" : ""} title={tip} onClick={() => setPosTab(k)}>{l}</button>)}
+            </div>
+            {posTab === "pos" && <>
             {item?.kind !== "motion" && <Row label="Position" kf={kf(["x", "y", "z"])}>{nums([["x", "X"], ["y", "Y"], ["z", "Z"]], 1)}</Row>}
             <Row label="Scale" kf={kf(["scale"])}>{nums([["scale", "%"]], 0.005, pct, (n) => n / 100)}</Row>
             {item?.kind === "motion" && <p className="hint">The path grows and shrinks around the middle of its nodes. Move it by Ctrl-dragging it on the canvas.</p>}
@@ -1243,11 +1283,8 @@ export function EditPanel() {
             {item?.kind !== "motion" && <div className="chips" style={{ marginTop: 4 }}>
               <button className="chip" onClick={() => { st().checkpoint(); P("x").set(project.width / 2); P("y").set(project.height / 2); }}>Center on canvas</button>
             </div>}
-          </>
-        );
-      case "rotate":
-        return (
-          <>
+            </>}
+            {posTab === "3d" && <>
             {/* the same gimbal as on the canvas: drag the ball to tumble, the ring to spin, click an axis to face it */}
             {(item || group) && <RotationGimbal inline itemId={item ? item.id : null} trackId={group?.id} s={item ? itemState(project, item, t) : groupValues(group!, t)} onExit={() => {}} />}
             <Row label="Rotation" kf={kf(["rx", "ry", "rz"])}>{nums([["rx", "X"], ["ry", "Y"], ["rz", "Z"]], 0.5, deg)}</Row>
@@ -1256,11 +1293,28 @@ export function EditPanel() {
               <button className="chip" onClick={() => { st().checkpoint(); P("rx").set(0); P("ry").set(0); P("rz").set(0); }}>Reset</button>
               <button className={"chip" + (st().ui.mode3d ? " on" : "")} onClick={() => setUI({ mode3d: !st().ui.mode3d })}>3D gimbal {st().ui.mode3d ? "on" : "off"}</button>
             </div>
+            </>}
           </>
         );
       case "opacity":
+      case "effects": {
+        const L = (k: keyof typeof NO_LOOK, label: string, max: number) => (
+          <Row label={label}><Slider value={lookAt(item, t - item.start)[k]} min={0} max={max} step={k === "blur" ? 0.5 : 1} onChange={(v) => setF((it) => { setLook(it, k, st().t, v); }, false)} /></Row>
+        );
         return (
           <>
+            <div className="atabs2" role="tablist">
+              {([["fx", "Effects", "Glow, shadow, blur, depth and more"], ["blend", "Opacity & blend", "How see-through it is, and how it mixes with what's under it"]] as const).map(([k, l, tip]) =>
+                <button key={k} role="tab" className={fxTab === k ? "on" : ""} title={tip} onClick={() => setFxTab(k)}>{l}</button>)}
+            </div>
+            {fxTab === "fx" && <>
+            {item.kind === "glass" && <Row label="Glass blur"><Slider value={item.effect?.blur ?? 1.5} min={0} max={20} step={0.5} onChange={(v) => setF((it) => { it.effect = { kind: "liquid-glass", magnify: it.effect?.magnify ?? 1.35, blur: v }; }, false)} /></Row>}
+            <LookOptions item={item} L={L} />
+            {item.kind === "text" && <TextShadowOpts item={item} />}
+            <p className="hint">Shadow, blur and glow flatten 3D rotation on this item.</p>
+            <ItemFxSection item={item} />
+            </>}
+            {fxTab === "blend" && <>
             <Row label="Opacity" kf={kf(["opacity"])}><Slider value={P("opacity").get()} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => P("opacity").set(v)} /></Row>
             <div className="psub">Blend · how it mixes with what's under it</div>
             <div className="blends">
@@ -1277,19 +1331,7 @@ export function EditPanel() {
                 </div>
               ))}
             </div>
-          </>
-        );
-      case "effects": {
-        const L = (k: keyof typeof NO_LOOK, label: string, max: number) => (
-          <Row label={label}><Slider value={lookAt(item, t - item.start)[k]} min={0} max={max} step={k === "blur" ? 0.5 : 1} onChange={(v) => setF((it) => { setLook(it, k, st().t, v); }, false)} /></Row>
-        );
-        return (
-          <>
-            {item.kind === "glass" && <Row label="Glass blur"><Slider value={item.effect?.blur ?? 1.5} min={0} max={20} step={0.5} onChange={(v) => setF((it) => { it.effect = { kind: "liquid-glass", magnify: it.effect?.magnify ?? 1.35, blur: v }; }, false)} /></Row>}
-            <LookOptions item={item} L={L} />
-            {item.kind === "text" && <TextShadowOpts item={item} />}
-            <p className="hint">Shadow, blur and glow flatten 3D rotation on this item.</p>
-            <ItemFxSection item={item} />
+            </>}
           </>
         );
       }

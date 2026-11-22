@@ -236,6 +236,8 @@ function affineNear(f: (p: Pt) => Pt, [ox, oy]: Pt, e = 100): M6 {
 /** From the canvas to an item's own box (for drawing things in it). */
 export const worldToItem = (s: ItemState, it: Item): M6 => affineNear((p) => toLocal(s, it, p), [s.x, s.y]);
 export const toItemBox = (s: ItemState, it: Item, p: Pt): Pt => toLocal(s, it, p);
+/** A point of an item (in its own box) where it lands on the canvas. */
+export const itemToWorld = (s: ItemState, it: Item, p: Pt): Pt => toWorld(s, it, p);
 
 /** Letters on the canvas: each piece of text with the matrix that puts it there (letter animations, typewriter and curved text included). */
 export type Letters = { font: string; size: number; spacing: number; wordSpacing: number; central: boolean; pieces: { text: string; m: M6; x: number; y: number; o: number }[] };

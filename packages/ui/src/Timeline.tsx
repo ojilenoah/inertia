@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 const topLayer = () => (document.querySelector(".mo") as HTMLElement | null) ?? document.body;
 import type { Bezier, EaseName, Item, Keyframe, Project, Prop, Track, TrackSort } from "@moshion/engine";
 import {
-  EASE_PRESETS, sampleKeys, remapKeyTimes, smoothValue, backgroundCSS, TRACK_SORTS, sortTracks, addTrack, deleteTrack, insertRow, insertTrackAfter, rowFree, TRANSITIONS, addCanvasKey, splitBackground, moveCanvasKey, removeCanvasKey, contentEnd, itemHidden, itemLocked, keyAt, keySnap, loopLabel, stepLabel, uid, NICE_STEPS, PROP_LABEL, PROPS, SCENE_EFFECTS, addKey, fmtClock, fmtStep, fmtTick, groupTracks, keyTimes,
+  EASE_PRESETS, sampleKeys, remapKeyTimes, smoothValue, backgroundCSS, TRACK_SORTS, sortTracks, deleteTrack, insertRow, insertTrackAfter, rowFree, TRANSITIONS, addCanvasKey, splitBackground, moveCanvasKey, removeCanvasKey, contentEnd, itemHidden, itemLocked, keyAt, keySnap, loopLabel, stepLabel, uid, NICE_STEPS, PROP_LABEL, PROPS, SCENE_EFFECTS, addKey, fmtClock, fmtStep, fmtTick, groupTracks, keyTimes,
   ownValue, removeKey, removeLookAndTextKeys, ripple, shiftLookAndTextKeys, snap, snapTargets, splitItem, toBezier, ungroupTrack,
 } from "@moshion/engine";
 import type { NumKey } from "@moshion/engine";
@@ -42,7 +42,8 @@ let ROW_H = 32, CLIP_PAD = 4;
 /** Phones: thin rows that keep the same size on screen whatever the interface size. */
 function setRowSize(phone: boolean, uiScale: number) {
   const k = Math.min(1, Math.max(0.5, uiScale || 1));
-  ROW_H = phone ? Math.round(30 / k) : 32;
+  // phones use the normal row size (the interface size setting scales everything); kept the same on screen at any setting
+  ROW_H = phone ? Math.round(32 / k) : 32;
   CLIP_PAD = phone ? Math.round(4 / k) : 4;
 }
 
@@ -396,7 +397,7 @@ export function Timeline() {
    */
   function startTlBox(e: React.PointerEvent) {
     if (e.button !== 0 || e.target !== e.currentTarget) return;
-    if (e.pointerType === "touch") return touchOnTracks(e);
+    if (e.pointerType === "touch" || phone) return touchOnTracks(e); // phone layout: hold first to draw a box (mouse too)
     boxFrom(e.clientX, e.clientY, e.ctrlKey || e.metaKey, e.shiftKey);
   }
   /**
@@ -1146,9 +1147,7 @@ function CanvasHead({ project, h }: { project: Project; h: number }) {
       <span className="tid" style={{ width: 16, height: 16, borderRadius: 3, background: project.background, boxShadow: "inset 0 0 0 1px rgba(128,128,128,.35)" }} />
       <span className="nm"><b style={{ color: "var(--ink)" }}>Canvas</b> · {project.effects.length} fx</span>
       <span className="tico"><Icon name="sparkle" /></span>
-      <button className="tins" title="Add a track" onClick={(e) => { e.stopPropagation(); let id = ""; useStore.getState().edit((p) => { id = addTrack(p, "video"); }); useStore.getState().toast(`Track ${id} added`); }}>
-        <Icon name="plus" size={12} />
-      </button>
+      {/* no add button on the canvas row */}
     </div>
   );
 }

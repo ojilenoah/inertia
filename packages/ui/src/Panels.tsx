@@ -29,8 +29,8 @@ export function Header() {
   return (
     <header className="card head">
       <button className="ib" title="All projects" aria-label="All projects" onClick={goHome}><Icon name="board" /></button>
+      {/* just the name: the size shows under the canvas and the frame rate in the player */}
       <div className="ptitle">
-        <span className="lbl">{project.width}×{project.height} · {project.fps} fps</span>
         <input
           className="pname" value={project.name} aria-label="Project name" title="Rename the project"
           onFocus={() => useStore.getState().checkpoint()}

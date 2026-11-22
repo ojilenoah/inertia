@@ -29,7 +29,7 @@ function useLayoutVars(vertical: boolean, aspect: number, media: boolean, f = 1,
   const size = useWindowSize();
   // upright phone: the video takes the full width, up to a bit under half the height
   // (no top bar there, and the tools sit beside the video)
-  const auto = Math.min((size.h - 6) * 0.6, (size.w - 6 - 45 - 39) / aspect); // tools on the left, play controls on the right
+  const auto = Math.min((size.h - 6) * 0.6, (size.w - 6 - 49 - 43) / aspect); // tools on the left, play controls on the right
   const sh = Math.round(Math.max(120, Math.min(size.h - 160, split != null ? (size.h - 6) * split : auto)));
   const vw = Math.round(Math.min(size.w * 0.75, Math.max(200, Math.min(size.w * 0.4, ((size.h - 6 - 34) * 9) / 16) * f)));
   const rows = size.h - 6;
@@ -162,6 +162,7 @@ function useShortcuts() {
 
 export function Editor() {
   const project = useStore((s) => s.project);
+  const selectedId = useStore((s) => s.selected);
   const ui = useStore((s) => s.ui);
   const vertical = isVertical(project);
   const { vertical: _v, stacked, ...vars } = useLayoutVars(vertical, project.width / project.height, true, ui.view === "board" ? ui.viewK ?? 1 : 1, ui.phoneVid ?? null);
@@ -203,7 +204,7 @@ export function Editor() {
   useEffect(() => installTouch(), []);
   useEffect(() => applyUiScale(ui.uiScale ?? 1), [ui.uiScale]);
   return (
-    <div className={"mo" + (framed ? " framed" : "") + (stacked ? " phone" : "") + (stacked && (ui.panel || ui.ctx) ? " dimmed" : "")} data-theme={ui.theme} style={vars as React.CSSProperties} onContextMenu={(e) => e.preventDefault()}>
+    <div className={"mo" + (framed ? " framed" : "") + (stacked ? " phone" : "") + (stacked && (ui.panel || ui.ctx) ? " dimmed" : "") + (stacked && (selectedId || ui.selGroup) ? " selbar" : "")} data-theme={ui.theme} style={vars as React.CSSProperties} onContextMenu={(e) => e.preventDefault()}>
       {framed && <TitleBar />}
       {ui.view === "home" ? <Home /> : ui.view === "edit" || ui.view === "board" ? (
         <div className={"ws " + layout + (media ? " am" : "")}>

@@ -1225,7 +1225,7 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 /* ---------- phone held upright: stacked like a phone video editor ----------
    the tools run down a thin sidebar beside the video; the tracks sit under it (or above, with the video at the bottom).
    No top bar: the menu (with Export) is the sidebar's first button. Media takes the tracks' place. */
-.ws.s-top, .ws.s-bottom { grid-template-columns: 42px minmax(0, 1fr) 36px; }
+.ws.s-top, .ws.s-bottom { grid-template-columns: 46px minmax(0, 1fr) 40px; }
 .ws.s-top { grid-template-rows: var(--sh) minmax(0, 1fr); grid-template-areas: "rail viewer play" "timeline timeline timeline"; }
 .ws.s-bottom { grid-template-rows: minmax(0, 1fr) var(--sh); grid-template-areas: "timeline timeline timeline" "rail viewer play"; }
 .ws.s-top.am { grid-template-areas: "rail viewer play" "assets assets assets"; }
@@ -1233,7 +1233,6 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .ws.s-top.am > .timeline, .ws.s-bottom.am > .timeline { display: none; }
 .ws.s-top .rail, .ws.s-bottom .rail { padding: 4px 0; overflow-y: auto; overflow-x: hidden; }
 .ws.s-top .rail > *, .ws.s-bottom .rail > * { flex: none; }
-.ws.s-top .rail .ib, .ws.s-bottom .rail .ib { width: 32px; height: 32px; }
 .ws.s-top .rail hr, .ws.s-bottom .rail hr { margin: 4px 0; }
 /* the menu button at the top of the sidebar, and its menu */
 .pmbtn { position: relative; }
@@ -1249,13 +1248,11 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .pmitem { height: 34px; display: flex; align-items: center; gap: 9px; padding: 0 8px; margin: 0 -4px; border-radius: 8px; font: 500 13px var(--sans); color: var(--ink); }
 .pmitem:hover { background: var(--panel-2); }
 /* slimmer bars under the video, so the video gets the height */
-.ws.s-top .tlbar, .ws.s-bottom .tlbar { height: 31px; padding: 0 4px; gap: 2px; overflow-x: auto; overflow-y: hidden; }
+.ws.s-top .tlbar, .ws.s-bottom .tlbar { overflow-x: auto; overflow-y: hidden; }
 .ws.s-top .tlbar > *, .ws.s-bottom .tlbar > * { flex: none; }
-.ws.s-top .pbar, .ws.s-bottom .pbar { height: 38px; overflow-x: auto; overflow-y: hidden; }
 .ws.s-top .pbar > *, .ws.s-bottom .pbar > * { flex: none; }
 .ws.s-top .pbar .sp, .ws.s-bottom .pbar .sp { flex: 1; }
 .ws.s-top .tcm, .ws.s-bottom .tcm, .ws.s-top .pbar-ratio, .ws.s-bottom .pbar-ratio { display: none; }
-.ws.s-top .tc, .ws.s-bottom .tc { min-width: 0; font-size: 15px; }
 /* phones: everything still scrolls, but no scrollbars are ever drawn */
 .mo.phone *, .mo.phone *:hover { scrollbar-width: none; }
 .mo.phone *::-webkit-scrollbar { display: none; }
@@ -1272,33 +1269,12 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .pmenu .savewarn { align-self: flex-start; }
 /* phones: a compact play bar that also holds the canvas bar's controls (size, onion skin, grid, 3D view) */
 .pbslot { display: contents; }
-.mo.phone .pbar { gap: 0; padding: 0 3px; height: 36px; }
-.mo.phone .pbar .ib { width: 24px; height: 26px; }
-.mo.phone .pbar .ib svg.i { width: 14px; height: 14px; }
-.mo.phone .pbar .transport { gap: 0; }
-.mo.phone .pbar .play { width: 26px; height: 22px; margin: 0 1px; }
-.mo.phone .pbar .play svg { transform: scale(.85); }
-.mo.phone .pbar .tc { font-size: 11.5px; padding: 0 3px; min-width: 0; }
 .mo.phone .pbar .pbsep { display: none; }
 .mo.phone .pbar .chip { height: 20px; padding: 0 4px; font-size: 9.5px; margin: 0 2px 0 auto; }
 .mo.phone .pbar .chip + .chip { display: none; } /* the zoom readout: just information */
 /* History lives in the sidebar on phones; its list opens beside it */
 .rail .histpop { position: fixed; top: 8px; left: 50px; bottom: auto; }
 /* phones: a slimmer track toolbar and a thinner time ruler (seeker) */
-.mo.phone .tlbar .ib { width: 24px; height: 24px; }
-.mo.phone .tlbar .ib svg.i { width: 14px; height: 14px; }
-.mo.phone .tlbar .seg { padding: 2px; }
-.mo.phone .tlbar .seg.sm button { height: 19px; min-width: 22px; padding: 0 4px; }
-.mo.phone .tlbar .seg.sm button svg.i { width: 13px; height: 13px; }
-.mo.phone .tlbar .sep { height: 14px; margin: 0 2px; }
-.mo.phone .tlbar .chip { height: 19px; padding: 0 6px; font-size: 10px; }
-.mo.phone .ruler, .mo.phone .rulerpad, .mo.phone .marker { height: 22px; }
-.mo.phone .lrows, .mo.phone .snapline, .mo.phone .tlafter { top: 22px; }
-.mo.phone .tick { height: 4px; }
-.mo.phone .tlab { top: 3px; font-size: 9px; }
-.mo.phone .phtag { top: 2px; font-size: 9.5px; padding: 1px 5px; }
-.mo.phone .playhead::before { top: 16px; }
-.mo.phone .ruler .tend::before { height: 8px; width: 7px; }
 /* phones: thin track rows (same size on screen at any interface size; the timeline sets --rowh / --clippad) */
 .mo.phone .cvdock, .mo.phone .cvdock .lrow.canvas { height: var(--rowh); }
 .mo.phone .cvdock .lrow.canvas .clip.cvseg { top: var(--clippad) !important; height: calc(var(--rowh) - 2 * var(--clippad)) !important; }
@@ -1354,7 +1330,6 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .pmbtn.on { z-index: 115; }
 /* the playhead's line: grab it anywhere along its length (wider for fingers) */
 .phgrab { position: absolute; top: 22px; bottom: 0; left: -5px; width: 10px; pointer-events: auto; cursor: ew-resize; touch-action: none; }
-.mo.phone .phgrab { top: 16px; }
 @media (any-pointer: coarse) { .phgrab { left: -11px; width: 22px; } }
 /* first start (desktop app): where projects are kept */
 .fsetup { width: min(420px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 10px; }
@@ -1382,7 +1357,6 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .mo.phone .ws > .pbar .transport { flex-direction: column; gap: 2px; }
 .mo.phone .ws > .pbar .tc, .mo.phone .ws > .pbar .tcm { display: none; }
 .mo.phone .ws > .pbar .play { margin: 3px 0; }
-.mo.phone .ws > .pbar .ib { width: 28px; height: 28px; }
 /* phones: no zoom slider or −/+ (slide the ruler to zoom); the tick size and Fit stay */
 .mo.phone .zoomer > :is(.ib, .zf) { display: none; }
 /* phones: the track toolbar centred */
@@ -1397,7 +1371,7 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .mo.phone .ws > .pbar .pbmid .transport { flex-direction: column; gap: 2px; }
 .mo.phone .ws > .pbar .histpop { position: fixed; top: 8px; right: 46px; left: auto; bottom: auto; }
 .mo.phone .ws > .pbar .tmods { margin-bottom: 2px; }
-.mo.phone .tlbar .tsort { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 6px; flex: none; }
+.mo.phone .tlbar .tsort { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; flex: none; }
 /* group icon (folds the group) */
 .th.grp .gibtn { display: grid; place-items: center; flex: none; padding: 0; color: inherit; }
 /* names column collapsed: the same space on both sides; groups show just their icon */
@@ -1408,3 +1382,47 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .narrow .th .tico { margin: 0; }
 .mo.phone .narrow .th, .mo.phone .narrow .th.grp { padding: 0 2px; }
 .tlafter.tlbefore { left: 0; right: auto; border-left: 0; border-right: 1.5px solid var(--ink-3); }
+/* popups, menus, cards and the floating bar: see-through, with what's behind them softly blurred */
+body :is(.cmenu, .bmenu, .fbar, .pop, .histpop, .gridpop, .shpop, .pmenu, .cbubble) {
+  background: color-mix(in srgb, var(--panel) 68%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.35); backdrop-filter: blur(18px) saturate(1.35);
+}
+/* the playhead's grab strip stops above the canvas row, so its transition boxes and clips stay tappable under the line */
+.phgrab { bottom: 58px; }
+.mo.phone .phgrab { bottom: var(--rowh, 32px); }
+/* board view: a locked item is clipped to its canvas card */
+.bclip { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.bclip > * { pointer-events: auto; }
+/* a selected line's points */
+.lineedit { position: absolute; left: 0; top: 0; pointer-events: none; }
+.lineedit .lseg { stroke: transparent; fill: none; pointer-events: stroke; }
+.lineedit .lpt { fill: #fff; stroke: var(--sel); pointer-events: auto; cursor: move; }
+.lineedit .lpt:hover { fill: var(--sel); }
+/* phones: the item's bar in the tracks, under the canvas row, scrolling sideways when its buttons don't fit;
+   while something is selected the tracks make a 40px strip for it at the bottom */
+.mo.phone.selbar .cvdock .lrow.canvas, .mo.phone.selbar .th.canvas { visibility: hidden; } /* the item bar sits in the canvas row's place */
+/* a docked bar like the track toolbar (not a floating card) */
+body .fbar.under { padding: 0 6px; gap: 2px; align-items: center; justify-content: safe center; border-radius: 0 0 var(--r) var(--r); box-shadow: none; border-top: 1px solid var(--line-2); background: var(--panel); -webkit-backdrop-filter: none; backdrop-filter: none; overflow-x: auto; overflow-y: hidden; flex-wrap: nowrap; touch-action: pan-x; scrollbar-width: none; }
+body .fbar.under .ib { width: 28px; height: 26px; }
+.fbar.under > * { flex: none; }
+/* a line's + past each end, and adding points from it */
+.lineedit .lplus { pointer-events: auto; cursor: pointer; }
+.lineedit .lplus circle { fill: var(--sel); stroke: #fff; stroke-width: 0; }
+.lineedit .lplus path { stroke: #fff; fill: none; stroke-linecap: round; }
+.lineedit .lplus.on circle { fill: var(--accent); }
+.lineedit .lplus.on path { stroke: #111; }
+.lineedit .lext { fill: transparent; pointer-events: all; cursor: crosshair; }
+.lineedit .lprev { stroke: var(--sel); stroke-dasharray: 6 5; stroke-linecap: round; fill: none; pointer-events: none; opacity: .8; }
+.linehint { position: fixed; left: 50%; top: 10px; transform: translateX(-50%); z-index: 130; display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; border-radius: 10px; font: 500 12px var(--sans); color: var(--ink); background: color-mix(in srgb, var(--panel) 80%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); box-shadow: 0 0 0 1px var(--line), 0 10px 28px -10px rgba(0,0,0,.5); white-space: nowrap; }
+.linehint span { color: var(--ink-3); }
+.linehint button { height: 26px; padding: 0 12px; border-radius: 7px; background: var(--ink); color: var(--panel); font-weight: 600; }
+/* selection boxes: their own layer above the canvas looks and screen effects, moving with the canvas */
+.selworld { position: absolute; left: 0; top: 0; transform-origin: 0 0; pointer-events: none; z-index: 45; overflow: visible; }
+/* long-press a line (phones): add a node there, or its corners' roundness, with a check to finish */
+.lpopback { position: fixed; inset: 0; z-index: 129; }
+.linepop { position: fixed; z-index: 130; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 5px; border-radius: 12px; background: color-mix(in srgb, var(--panel) 80%, transparent); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); box-shadow: 0 0 0 1px var(--line), 0 12px 30px -10px rgba(0,0,0,.55); }
+.linepop > button { height: 34px; padding: 0 12px; display: flex; align-items: center; gap: 6px; border-radius: 8px; font: 500 12.5px var(--sans); color: var(--ink); }
+.linepop > button:hover { background: var(--panel-3); }
+.linepop .lpround { width: 150px; padding: 0 6px; }
+.linepop .lpval { min-width: 28px; text-align: right; font: 500 11px var(--mono); color: var(--ink-3); }
+.linepop .lpok { width: 34px; padding: 0; justify-content: center; background: var(--ink); color: var(--panel) !important; }

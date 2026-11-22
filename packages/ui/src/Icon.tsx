@@ -1,6 +1,7 @@
 const P: Record<string, string> = {
   edit: "M3 5h18v11H3zM3 20h18M8 20v-4M13 20v-4",
   menu: "M4 7h16M4 12h16M4 17h16",
+  check: "M5 12.5l4.5 4.5L19 7.5",
   nodes: "M2 4h7v6H2zM15 14h7v6h-7zM9 7c5 0 1 10 6 10",
   board: "M3 3h7v10H3zM13 6h8v5h-8zM13 14h8v6h-8z",
   prev: "M6 5v14M18 6l-9 6 9 6z",
