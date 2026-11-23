@@ -24,6 +24,8 @@ env:
 
 jobs:
   windows:
+    # a commit whose message has "[android only]" in it builds just the Android app
+    if: ${{ !contains(github.event.head_commit.message, '[android only]') }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -111,6 +113,10 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: android-actions/setup-android@v3
+        with:
+          # by default it asks for the old "tools" package, which the current SDK manager no longer has (that
+          # made every Android build fail); the platform and build tools Gradle needs come with these instead
+          packages: platform-tools platforms;android-34 build-tools;34.0.0
       - name: Install Android NDK
         run: |
           sdkmanager --install "ndk;27.0.12077973"
