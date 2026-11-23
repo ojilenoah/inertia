@@ -3,6 +3,7 @@ import { arrowHeads, dashArray, fxOpt, hexA, shapeD } from "@moshion/engine";
 import type { MorphChar } from "@moshion/engine";
 import { pinHAt, pinMap, pinMatrix } from "@moshion/engine";
 import { morphLayout } from "./textmorph";
+import { reshapeOutline } from "./extras";
 import { activeBackground, backgroundCSS, bgVideoTime, itemState, pieceFx, splitPieces, textAnimOf, textUnit } from "@moshion/engine";
 import { activeLooks, looksTransform } from "./Looks";
 import { mediaBlob } from "./media";
@@ -244,6 +245,9 @@ const BLEND: Record<string, GlobalCompositeOperation> = { normal: "source-over",
 /** An item's outline, centred on the origin, and how to fill it (shapes with holes use evenodd). */
 function outline(it: Item): { p: Path2D; rule: CanvasFillRule } {
   const w = it.w, h = it.h, p = new Path2D();
+  // corner pin, Reshape mode: the outline bent to the corners
+  const rsh = (it as Item & { __reshape?: [number, number][] | null }).__reshape;
+  if (rsh) { rsh.forEach(([px, py], i) => (i ? p.lineTo(px - w / 2, py - h / 2) : p.moveTo(px - w / 2, py - h / 2))); p.closePath(); return { p, rule: "nonzero" }; }
   // hollow: the outline with the hole (the same shape, t in) cut out
   const hol = (it as Item & { __hollow?: ReturnType<typeof hollowParts> }).__hollow ?? null; // worked out at the frame's time (morphing shapes too)
   if (hol) {
@@ -582,7 +586,14 @@ async function paintFlat(ctx: Ctx, it: Item, s: ItemState, t: number, rs: Render
       ctx.fillStyle = "#d9d7d2"; ctx.fillRect(-it.w / 2, -it.h / 2, it.w, it.h);
       const img = images.get(u);
       if (img) drawImageFit(ctx, img, img.naturalWidth, img.naturalHeight, it);
-    } else if (it.fill !== "transparent") paintCSS(ctx, it.fill, -it.w / 2, -it.h / 2, it.w, it.h);
+    } else if (it.fill !== "transparent") {
+      // a reshaped outline can reach past the box: fill all of it
+      const rsh = (it as Item & { __reshape?: [number, number][] | null }).__reshape;
+      if (rsh) {
+        const xs = rsh.map((q) => q[0] - it.w / 2), ys = rsh.map((q) => q[1] - it.h / 2), x0 = Math.min(...xs), y0 = Math.min(...ys);
+        paintCSS(ctx, it.fill, x0, y0, Math.max(...xs) - x0, Math.max(...ys) - y0);
+      } else paintCSS(ctx, it.fill, -it.w / 2, -it.h / 2, it.w, it.h);
+    }
     if (it.fill.startsWith("linear") && (it.kind === "image" || it.kind === "ellipse")) drawMountains(ctx, it.w, it.h, it.kind === "ellipse");
     if (it.text) {
       ctx.fillStyle = it.color ?? "#111"; ctx.font = `${it.fontWeight ?? 600} ${it.fontSize ?? 40}px "Geist Mono", monospace`;
@@ -748,18 +759,19 @@ async function drawItem(ctx: Ctx, raw: Item, s: ItemState, t: number, rs: Render
   // look and text as they are at this moment (they can have keyframes)
   const tx = textShown(raw, t - raw.start);
   const lc = letterColors(raw, t - raw.start);
-  const it: Item & { __mt?: typeof tx; __morph?: MorphChar[]; __shape?: { d: string; evenodd?: boolean }; __letters?: Map<number, string> | null; __hollow?: ReturnType<typeof hollowParts> } =
-    { ...resolveItem(raw, t - raw.start), __morph: tx.morph, __mt: tx, __shape: raw.kind === "shape" ? itemShapeD(raw, t - raw.start, raw.w, raw.h) ?? undefined : undefined, __letters: lc, __hollow: hollowParts(raw, t - raw.start) };
+  const it: Item & { __reshape?: [number, number][] | null; __mt?: typeof tx; __morph?: MorphChar[]; __shape?: { d: string; evenodd?: boolean }; __letters?: Map<number, string> | null; __hollow?: ReturnType<typeof hollowParts> } =
+    { ...resolveItem(raw, t - raw.start), __morph: tx.morph, __mt: tx, __shape: raw.kind === "shape" ? itemShapeD(raw, t - raw.start, raw.w, raw.h) ?? undefined : undefined, __letters: lc, __hollow: reshapeOutline(raw, t) ? null : hollowParts(raw, t - raw.start), __reshape: reshapeOutline(raw, t) };
   if (it.kind === "glass") { drawGlass(ctx, it, s, rs); return; }
   const k = ctx.getTransform().a; // world px → output px
   // corner pin: warped in perspective onto its four corners (in its own frame, before it turns)
-  const pinH = it.kind === "line" || it.kind === "motion" ? null : pinHAt(raw, t - raw.start);
+  const pinH = it.kind === "line" || it.kind === "motion" || it.__reshape ? null : pinHAt(raw, t - raw.start);
   const tilted = !!pinH || Math.abs(s.rx % 360) > 0.05 || Math.abs(s.ry % 360) > 0.05 || Math.abs(s.z) > 0.05;
   // which side faces us: the corners' winding flips when the back is showing
   const [ax, ay] = project3D(s, -1, -1), [bx, by] = project3D(s, 1, -1), [cx2, cy2] = project3D(s, 1, 1);
   const back = (bx - ax) * (cy2 - ay) - (by - ay) * (cx2 - ax) < 0 && it.kind !== "text";
   // 1) paint it flat, with room around it for shadows, glow and overhanging text
-  const margin = Math.ceil(Math.max(it.w, it.h) * 0.35 + 80 + (it.look?.extrude ?? 0) + (it.look?.glow ?? 0) * 2 + (it.look?.shadow ?? 0) * 3);
+  const pinReach = it.__reshape ? Math.max(0, ...it.__reshape.flatMap(([px, py]) => [-px, -py, px - it.w, py - it.h])) : 0; // a reshaped outline past its box
+  const margin = Math.ceil(Math.max(it.w, it.h) * 0.35 + 80 + pinReach + (it.look?.extrude ?? 0) + (it.look?.glow ?? 0) * 2 + (it.look?.shadow ?? 0) * 3);
   const fw = it.w + margin * 2, fh = it.h + margin * 2;
   const q = Math.min(2 * k, Math.max(0.05, k * Math.max(0.25, s.scale) * (tilted ? 1.25 : 1)), 4096 / Math.max(fw, fh)); // flat canvas px per item px
   const flat = rs.flat, f = flat.getContext("2d")!;

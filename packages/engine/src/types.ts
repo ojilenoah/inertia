@@ -186,6 +186,8 @@ export interface Item {
   /** How the text changes from one text keyframe to the next (default: smooth). */
   textMorph?: import("./morph").TextMorphKind;
   /** Corner pin: each corner's offset (px, in the item's own frame) — the item warps in perspective to fit. Keyframed in numKeys. */
+  /** Corner pin on a shape: "shape" reshapes its outline (and border) to the corners instead of a perspective warp. */
+  pinMode?: "persp" | "shape";
   pin0x?: number; pin0y?: number; pin1x?: number; pin1y?: number; pin2x?: number; pin2y?: number; pin3x?: number; pin3y?: number;
   /** Glass/effect shapes. */
   effect?: { kind: "liquid-glass" | "frost"; magnify: number; blur: number };

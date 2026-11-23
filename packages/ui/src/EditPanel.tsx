@@ -23,7 +23,7 @@ import { deleteGroupKey, deleteItemKey } from "./Timeline";
 import { prop } from "./EditTools";
 import { duplicate, layer } from "./CanvasMenu";
 import { pickImageFile } from "./persist";
-import { canCarryText, canRide, pathTiltOf } from "./extras";
+import { canCarryText, canRide, pathTiltOf, RESHAPABLE } from "./extras";
 import { startMaskPick } from "./MaskPick";
 import { atPickedKeys, toggleLock } from "./editing";
 import { scrub } from "./scrub";
@@ -1315,6 +1315,7 @@ export function EditPanel() {
               const off = pinAt(item, t - item.start) ?? [[0, 0], [0, 0], [0, 0], [0, 0]];
               const pinned = st().ui.pinning === item.id;
               return <>
+                {RESHAPABLE(item) && <Row label="Mode"><Seg value={item.pinMode === "shape" ? "shape" : "persp"} options={[["persp", "Perspective", "Warp it like a card tilted in space"], ["shape", "Reshape", "Bend the outline and border to the corners (border keeps its thickness)"]]} onChange={(v) => setF((it) => { if (v === "shape") it.pinMode = "shape"; else delete it.pinMode; })} /></Row>}
                 {(["Top left", "Top right", "Bottom right", "Bottom left"] as const).map((lab, i) => (
                   <Row key={lab} label={lab}><div className="f2 even">
                     <Num label="X" value={Math.round(off[i][0] * 10) / 10} onChange={(v) => setF((it) => { setPinCorner(it, st().t, i, [v, off[i][1]]); }, false)} />

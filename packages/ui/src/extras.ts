@@ -1,5 +1,5 @@
 import type { Item, ItemState, Project, ShapeSpec } from "@moshion/engine";
-import { lineShape } from "@moshion/engine";
+import { lineShape, pinAt, pinQuad } from "@moshion/engine";
 import { followOffset, groupChain, itemState, itemsInGroup, motionAt, numAt, pathPivot, pathTransform, pathTransformZ, sampleKeys, pieceFx, resolveItem, shapeAt, splitPieces, textAnimOf, textUnit } from "@moshion/engine";
 import { outlinePoints } from "./shapeMorph";
 
@@ -629,4 +629,25 @@ export function pathPlace(project: Project, item: Item, t: number): ItemPlace | 
 export function placeCss(p: ItemPlace): string {
   const f = p.f, n = (v: number) => +v.toFixed(6);
   return `matrix(${n(p.ax[0] * f)},${n(p.ax[1] * f)},${n(p.by[0] * f)},${n(p.by[1] * f)},0,0)${p.rz ? ` rotate(${p.rz}deg)` : ""}`;
+}
+
+/** Shapes that can be reshaped by their corners (their outline and border are redrawn, not warped). */
+export const RESHAPABLE = (it: Item) => ["shape", "rect", "ellipse", "star"].includes(it.kind);
+/**
+ * Corner pin in Reshape mode: the shape's outline (from its box's top-left, in its own px) bent so its box's corners
+ * land on the pinned corners — each point keeps its place between the sides. Null when not reshaped.
+ */
+export function reshapeOutline(m: Item, t: number): Pt[] | null {
+  if (m.pinMode !== "shape" || !RESHAPABLE(m)) return null;
+  const off = pinAt(m, t - m.start);
+  if (!off) return null;
+  const loc = localOutline(m, t);
+  if (!loc) return null;
+  const q = pinQuad(m.w, m.h, off).map(([x, y]) => [x + m.w / 2, y + m.h / 2] as Pt);
+  return loc.map(([px, py]) => {
+    const u = px / (m.w || 1), v = py / (m.h || 1);
+    const tx = q[0][0] + (q[1][0] - q[0][0]) * u, ty = q[0][1] + (q[1][1] - q[0][1]) * u;
+    const bx = q[3][0] + (q[2][0] - q[3][0]) * u, by = q[3][1] + (q[2][1] - q[3][1]) * u;
+    return [tx + (bx - tx) * v, ty + (by - ty) * v] as Pt;
+  });
 }

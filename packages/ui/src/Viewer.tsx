@@ -27,7 +27,7 @@ import { MotionOverlay, PathDrawLayer, shownMotion } from "./MotionPath";
 import { LineDrawLayer } from "./Shapes";
 import { LineEditor } from "./LineEdit";
 import { hollowParts, itemShapeD } from "./shapeMorph";
-import { pathPlace, placeCss } from "./extras";
+import { pathPlace, placeCss, reshapeOutline, RESHAPABLE, maskOutline } from "./extras";
 import { depthStep, itemOutline, lookShadows, maskClipPath, maskFollowers, maskItems, maskOf, mul6, pathGlyphs, pathOffsetAt, repeatCopies, textLetters, textMaskOf, toItemBox, worldToItem, type Glyph } from "./extras";
 
 function VideoFace({ item }: { item: Item }) {
@@ -128,13 +128,22 @@ function lookFilter(item: Item) {
   return f.length ? f.join(" ") : undefined;
 }
 
+/** A mask on text running along a path: its outline on the canvas, as a clip for the letters (they're drawn on the canvas, not in the text's box). */
+function pathTextClip(project: Project, it: Item, t: number): string | undefined {
+  const mo = maskOutline(project, it, t);
+  if (!mo || !mo.rings.length) return undefined;
+  const d = mo.rings.map((r) => r.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join("") + "Z").join("");
+  return mo.invert ? `path(evenodd, "M-99999 -99999H99999V99999H-99999Z${d}")` : `path(nonzero, "${d}")`;
+}
+
 /** Text running along a line, motion path or shape outline: each letter placed by its own matrix. */
-function TextOnPath({ item, s, g }: { item: Item; s: ItemState; g: { glyphs: Glyph[]; size: number } }) {
+function TextOnPath({ item, s, g, clip }: { item: Item; s: ItemState; g: { glyphs: Glyph[]; size: number }; clip?: string }) {
   return (
-    <svg className="tpath" width="100%" height="100%" style={{ position: "absolute", left: 0, top: 0, overflow: "visible", pointerEvents: "none", opacity: s.opacity, filter: lookFilter(item) }}>
+    <svg className="tpath" width="100%" height="100%" style={{ position: "absolute", left: 0, top: 0, overflow: "visible", pointerEvents: "none", opacity: s.opacity, filter: lookFilter(item), clipPath: clip }}>
       <g fontSize={g.size} fontWeight={item.fontWeight ?? 800} fontStyle={item.italic ? "italic" : undefined} fill={item.color ?? "#111"}
         fontFamily={item.fontFamily ? `"${item.fontFamily}", var(--sans)` : "var(--sans)"} dominantBaseline="central" textRendering="geometricPrecision">
-        {g.glyphs.map((q, i) => <text key={i} x={-q.w / 2} y={0} opacity={q.a < 1 ? q.a : undefined} transform={`matrix(${q.m.map((v) => +v.toFixed(4)).join(" ")})`}>{q.ch}</text>)}
+        {/* every letter can be picked (and dragged along) as the text itself, wherever it sits along the path */}
+        {g.glyphs.map((q, i) => <text key={i} data-pathtext={item.id} style={{ pointerEvents: "auto", cursor: "grab" }} x={-q.w / 2} y={0} opacity={q.a < 1 ? q.a : undefined} transform={`matrix(${q.m.map((v) => +v.toFixed(4)).join(" ")})`}>{q.ch}</text>)}
       </g>
     </svg>
   );
@@ -323,7 +332,7 @@ function ItemView({ item: raw, s, editing, cropping, local = 0, extra }: { item:
   const letters = letterColors(raw, local);
   const { edit, setUI } = useStore.getState();
   // corner pin: the item warps in perspective onto its four corners (applied in its own frame, before it turns)
-  const pinH = raw.kind === "line" || raw.kind === "motion" ? null : pinHAt(raw, local);
+  const pinH = raw.kind === "line" || raw.kind === "motion" || (raw.pinMode === "shape" && RESHAPABLE(raw)) ? null : pinHAt(raw, local);
   const style: React.CSSProperties = {
     left: s.x - item.w / 2, top: s.y - item.h / 2, width: item.w, height: item.h,
     // flat items get a 2D transform (and no 3D layer), so their edges stay crisp however big they get
@@ -404,6 +413,23 @@ function ItemView({ item: raw, s, editing, cropping, local = 0, extra }: { item:
   if (item.kind === "camera") return <div className="obj camframe" data-id={item.id} style={{ ...style, borderRadius: 0 }}><span>Camera</span></div>;
   if (item.kind === "line" && item.line) {
     return <div className="obj" data-id={item.id} style={{ ...style, borderRadius: 0 }}><LineSvg item={item} /></div>;
+  }
+  // corner pin, Reshape mode: the outline and its border redrawn to the corners (the face covers the new outline's box)
+  const rsh = reshapeOutline(raw, raw.start + local);
+  if (rsh) {
+    const xs = rsh.map((q) => q[0]), ys = rsh.map((q) => q[1]);
+    const bx = Math.min(...xs), by = Math.min(...ys), bw = Math.max(1, Math.max(...xs) - bx), bh = Math.max(1, Math.max(...ys) - by);
+    const dl = rsh.map(([px, py], i) => `${i ? "L" : "M"}${(px - bx).toFixed(2)} ${(py - by).toFixed(2)}`).join("") + "Z";
+    const img = item.fill.startsWith("url(");
+    return (
+      <div className="obj" data-id={item.id} style={{ ...style, borderRadius: 0 }}>
+        <div className="face" style={{ left: bx, top: by, width: bw, height: bh, right: "auto", bottom: "auto", borderRadius: 0, background: item.fill, backgroundSize: img ? item.fit ?? "cover" : undefined, backgroundRepeat: "no-repeat", backgroundPosition: "center", ...shapeMaskCss(dl, bw, bh) }}>
+          {item.stroke?.width ? (
+            <svg className="sstroke" viewBox={`0 0 ${bw} ${bh}`} preserveAspectRatio="none"><path d={dl} fill="none" stroke={item.stroke.color} strokeWidth={item.stroke.width * 2} strokeLinejoin="round" /></svg>
+          ) : null}
+        </div>
+      </div>
+    );
   }
   const sd = item.kind === "shape" ? itemShapeD(raw, local, item.w, item.h) : null;
   // a border can draw itself on (Fill › Border › Draw)
@@ -830,7 +856,7 @@ export function Viewer() {
     };
     for (const el of under) {
       const o = (el as HTMLElement).closest?.<HTMLElement>(".world .obj[data-id]");
-      const id = o?.dataset.id;
+      const id = (el as Element).closest?.("[data-pathtext]")?.getAttribute("data-pathtext")?.split("~")[0] ?? o?.dataset.id;
       if (!id || ids.includes(id)) continue;
       const it = project.items.find((i) => i.id === id);
       if (it && !itemLocked(project, it) && onLetters(it)) ids.push(id);
@@ -1150,6 +1176,17 @@ export function Viewer() {
             if (e.button !== 0) return;
             if ((e.target as HTMLElement).closest("[contenteditable]")) return;
             let el = (e.target as HTMLElement).closest<HTMLElement>(".obj");
+            // a letter of text running along a path: that text (not the line or shape it sits on)
+            let onPathId = (e.target as Element).closest?.("[data-pathtext]")?.getAttribute("data-pathtext")?.split("~")[0];
+            // the line or shape it rides on is in front (a higher layer): the letters still win over it
+            if (!onPathId && el) {
+              const front = el.dataset.id;
+              for (const u of document.elementsFromPoint(e.clientX, e.clientY)) {
+                const pid = u.closest?.("[data-pathtext]")?.getAttribute("data-pathtext")?.split("~")[0];
+                if (pid && project.items.find((i) => i.id === pid)?.onPath === front) { onPathId = pid; break; }
+              }
+            }
+            if (onPathId) el = document.querySelector<HTMLElement>(`.world .obj[data-id="${CSS.escape(onPathId)}"]`) ?? el;
             { const hitItem = el && project.items.find((i) => i.id === el!.dataset.id); if (hitItem && itemLocked(project, hitItem)) el = null; }
             if (!el) { if (ui.cropping) setUI({ cropping: null }); if (ui.inGroup || ui.selGroup) setUI({ inGroup: null, selGroup: null }); startMarquee(e); return; }
             const item = project.items.find((i) => i.id === el.dataset.id)!;
@@ -1237,7 +1274,7 @@ export function Viewer() {
               // the fading copy at the item's old place in the stack (while it changes layer)
               // (text on a path: the copy is its letters on the path, never the plain text at its own spot)
               if (ghost) return path
-                ? <TextOnPath key={it.id + "~layer"} item={resolveItem(it, tt - it.start)} s={s} g={path} />
+                ? <TextOnPath key={it.id + "~layer"} item={resolveItem(it, tt - it.start)} s={s} g={path} clip={pathTextClip(project, it, tt)} />
                 : <ItemView key={it.id + "~layer"} item={{ ...it, id: `${it.id}~layer` }} s={s} local={tt - it.start} editing={false} cropping={false} extra={{ clipPath: clip, pointerEvents: "none" }} />;
               // on the board a locked item stays inside its canvas card (nothing of it spills over the edge)
               const Wrap = board && itemLocked(project, it) ? BoardClip : Fragment;
@@ -1251,7 +1288,7 @@ export function Viewer() {
                   {ui.onion && maskOf(project, it) && <ItemView key={`${it.id}~whole`} item={{ ...it, id: `${it.id}~whole` }} s={s} local={tt - it.start} editing={false} cropping={false} extra={{ opacity: 0.22, pointerEvents: "none" }} />}
                   <TextMaskDefs project={project} item={it} s={s} t={tt} />
                   <ItemView item={it} s={placed ? { ...s, x: placed.O[0], y: placed.O[1] } : onPathBox(project, it, s, path)} local={tt - it.start} editing={ui.editingText === it.id} cropping={ui.cropping === it.id} extra={{ clipPath: clip, ...(textMaskOf(project, it, tt) ? { maskImage: `url(#tmask-${it.id})`, WebkitMaskImage: `url(#tmask-${it.id})` } : {}), ...(path ? { opacity: 0 } : {}), ...(placed ? { transform: placeCss(placed) } : {}) }} />
-                  {path && <TextOnPath item={resolveItem(it, tt - it.start)} s={s} g={path} />}
+                  {path && <TextOnPath item={resolveItem(it, tt - it.start)} s={s} g={path} clip={pathTextClip(project, it, tt)} />}
                 </Wrap>
               );
             })}

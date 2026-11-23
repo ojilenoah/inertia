@@ -89,6 +89,8 @@ export interface UIState {
   lineTool: "line" | "pen" | null;
   /** Corner pin: the item whose corners are being dragged. */
   pinning?: string | null;
+  /** The 3D rotate gimbal's look: a ball to tumble (default) or three rings, one per axis. */
+  gimbal?: "ball" | "rings";
   /** Hand: the canvas only moves and zooms (dragging pans it, nothing gets picked). */
   hand?: boolean;
   /** Picking a mask by pointing at it ("with": it masks this item; "for": this item masks it); onion: how onion skin was before. */

@@ -125,8 +125,10 @@ export function RotationGimbal({ itemId, trackId, s, onExit, inline }: { itemId:
     });
   };
   const deg = (v: number) => `${Math.round(v)}°`;
+  const style = useStore((x) => x.ui.gimbal ?? "ball");
   return (
     <div className={"rgimbal" + (inline ? " inline" : "")} onPointerDown={(e) => e.stopPropagation()}>
+      {style === "rings" ? <Rings s={s} P={P} /> :
       <svg width={136} height={136} viewBox="-68 -68 136 136">
         <g className="rring" onPointerDown={spin}>
           <title>Spin around Z: drag along the ring · Shift snaps 15°</title>
@@ -146,14 +148,112 @@ export function RotationGimbal({ itemId, trackId, s, onExit, inline }: { itemId:
             </g>
           ))}
         </g>
-      </svg>
+      </svg>}
       <div className="rread">
         <span style={{ color: C.x }}>X {deg(s.rx)}</span><span style={{ color: C.y }}>Y {deg(s.ry)}</span><span style={{ color: C.z }}>Z {deg(s.rz)}</span>
       </div>
       <div className="rbtns">
         <button title="Reset rotation" onClick={() => { useStore.getState().checkpoint(); P("rx").set(0); P("ry").set(0); P("rz").set(0); }}>Reset</button>
+        <button title={style === "rings" ? "Switch to the ball" : "Switch to rings: one per axis"} onClick={() => useStore.getState().setUI({ gimbal: style === "rings" ? "ball" : "rings" })}>{style === "rings" ? "Ball" : "Rings"}</button>
         {!inline && <button title="Back to 2D editing" onClick={onExit}>2D</button>}
       </div>
     </div>
   );
 }
+
+/**
+ * The ring gimbal: one ring per axis, drawn the way the item is turned (X around the canvas's X; Y around the
+ * X-turned Y; Z around the item's own Z — the order the turns are applied in). Drag along a ring to turn round that
+ * axis (Shift: 15° steps). The near half of each ring is bright, the far half faint.
+ */
+/** The item's turn as a matrix (columns: where its own X, Y, Z axes point), in the same order the turns are applied. */
+function turnMatrix(rx: number, ry: number, rz: number): number[][] {
+  const cx = rotate([1, 0, 0], rx, ry, rz), cy = rotate([0, 1, 0], rx, ry, rz), cz = rotate([0, 0, 1], rx, ry, rz);
+  return [0, 1, 2].map((r) => [cx[r], cy[r], cz[r]]);
+}
+const mulM = (A: number[][], B: number[][]) => A.map((row) => [0, 1, 2].map((c) => row[0] * B[0][c] + row[1] * B[1][c] + row[2] * B[2][c]));
+/** The X / Y / Z turns that give this matrix, the set nearest to `near` (no jumps of 360° or flips mid-drag). */
+function turnAngles(m: number[][], near: [number, number, number]): [number, number, number] {
+  const D = 180 / Math.PI, sb = Math.max(-1, Math.min(1, m[0][2]));
+  const close = (v: number, to: number) => v + Math.round((to - v) / 360) * 360;
+  const cands: [number, number, number][] = [];
+  if (Math.abs(sb) > 0.99999) cands.push([Math.atan2(m[2][1], m[1][1]) * D, Math.asin(sb) * D, near[2]]);
+  else {
+    const rx = Math.atan2(-m[1][2], m[2][2]) * D, ry = Math.asin(sb) * D, rz = Math.atan2(-m[0][1], m[0][0]) * D;
+    cands.push([rx, ry, rz], [rx + 180, 180 - ry, rz + 180]);
+  }
+  let best = cands[0], bd = Infinity;
+  for (const c of cands) {
+    const w: [number, number, number] = [close(c[0], near[0]), close(c[1], near[1]), close(c[2], near[2])];
+    const d = Math.abs(w[0] - near[0]) + Math.abs(w[1] - near[1]) + Math.abs(w[2] - near[2]);
+    if (d < bd) { bd = d; best = w; }
+  }
+  return best;
+}
+
+/**
+ * The ring gimbal, like any 3D app's rotate gizmo: one ring per axis of the item as it's turned now (red X, green Y,
+ * blue Z). Dragging a ring turns the item round that ring's own axis, however it's already turned (Shift: 15°
+ * steps); the item's X / Y / Z angles are worked out from the result. The near half of each ring is bright.
+ */
+function Rings({ s, P, R = 52, bare }: { s: Pick<ItemState, "rx" | "ry" | "rz">; P: (p: Prop) => { get: () => number; set: (v: number) => void }; R?: number; bare?: boolean }) {
+  const N = 64, H = R + 16;
+  const rings = (["x", "y", "z"] as const).map((a, k) => {
+    // in the item's own frame: each ring sits round its own axis as the item is turned now
+    const fr = (v: V3) => rotate(v, s.rx, s.ry, s.rz);
+    const axis = fr(k === 0 ? [1, 0, 0] : k === 1 ? [0, 1, 0] : [0, 0, 1]);
+    const pts = Array.from({ length: N + 1 }, (_, i) => {
+      const th = (i / N) * Math.PI * 2, c = Math.cos(th), n = Math.sin(th);
+      return fr(k === 0 ? [0, c, n] : k === 1 ? [c, 0, n] : [c, n, 0]);
+    });
+    return { a, k, axis, pts };
+  });
+  const path = (pts: V3[], front: boolean) => {
+    let d = "", on = false;
+    pts.forEach(([x, y, z]) => { const show = front ? z >= -0.02 : true; if (show) { d += `${on ? "L" : "M"}${(x * R).toFixed(1)} ${(y * R).toFixed(1)}`; on = true; } else on = false; });
+    return d;
+  };
+  const grab = (e: React.PointerEvent, r: (typeof rings)[number]) => {
+    const svg = (e.currentTarget as SVGElement).ownerSVGElement!.getBoundingClientRect();
+    const mx = e.clientX - (svg.left + svg.width / 2), my = e.clientY - (svg.top + svg.height / 2);
+    const [ax, ay, az] = r.axis;
+    // how a point of the ring moves on screen as the turn grows (axis × point)
+    const speed = (p: V3): [number, number] => [(ay * p[2] - az * p[1]) * R, (az * p[0] - ax * p[2]) * R];
+    let vx: number, vy: number;
+    if (Math.abs(az) < 0.35) {
+      // seen (nearly) edge-on: drag the way its nearest-to-you point moves (along the line)
+      [vx, vy] = speed(r.pts.reduce((q, p) => (p[2] > q[2] ? p : q), r.pts[0]));
+    } else {
+      // the grabbed point (the near half wins where front and back overlap)
+      let best = r.pts[0], bd = Infinity;
+      for (const p of r.pts) { const d = Math.hypot(p[0] * R - mx, p[1] * R - my) - (p[2] >= 0 ? 4 : 0); if (d < bd) { bd = d; best = p; } }
+      [vx, vy] = speed(best);
+    }
+    const v2 = Math.max(vx * vx + vy * vy, (0.3 * R) ** 2);
+    const chans = (["rx", "ry", "rz"] as const).map((q) => P(q));
+    const e0 = chans.map((c) => c.get()) as [number, number, number];
+    const M0 = turnMatrix(...e0);
+    dragger(e, (dx, dy, ev) => {
+      let d = (((dx * vx + dy * vy) / v2) * 180) / Math.PI;
+      if (ev.shiftKey) d = Math.round(d / 15) * 15;
+      // turn round the item's own axis: after what it's turned by already
+      const Rk = turnMatrix(r.k === 0 ? d : 0, r.k === 1 ? d : 0, r.k === 2 ? d : 0);
+      const out = turnAngles(mulM(M0, Rk), e0);
+      out.forEach((v, i) => { if (Math.abs(v - chans[i].get()) > 1e-3) chans[i].set(Math.round(v * 10) / 10); });
+    });
+  };
+  return (
+    <svg width={H * 2} height={H * 2} viewBox={`${-H} ${-H} ${H * 2} ${H * 2}`} className={"rrings" + (bare ? " bare" : "")}>
+      {bare ? <circle r={R} fill="none" stroke="rgba(255,255,255,.35)" strokeWidth={1} strokeDasharray="2 4" /> : <circle r={R} className="obg" />}
+      {rings.map((r) => <path key={r.a + "b"} d={path(r.pts, false)} fill="none" stroke={C[r.a]} strokeWidth={1.5} opacity={0.3} />)}
+      {[...rings.slice(1), rings[0]].map((r) => (
+        <g key={r.a} className="rring" onPointerDown={(e) => grab(e, r)}>
+          <title>{`Turn around ${r.a.toUpperCase()} · Shift: 15°`}</title>
+          <path d={path(r.pts, false)} fill="none" stroke="transparent" strokeWidth={12} />
+          <path d={path(r.pts, true)} fill="none" stroke={C[r.a]} strokeWidth={2.5} strokeLinecap="round" />
+        </g>
+      ))}
+    </svg>
+  );
+}
+
