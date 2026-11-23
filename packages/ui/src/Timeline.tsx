@@ -856,7 +856,8 @@ export function Timeline() {
           </div>
           {snapAt != null && <div className="snapline" style={{ left: x(snapAt) }} />}
           <div className="cvdock"><CanvasRow h={canvasH(project)} x={x} pps={pps} tOf={tOf} /></div>
-          <div className="ruler bottom" onPointerDown={startScrub} title="Drag to move the playhead">
+          <div className="ruler bottom" onPointerDown={(e) => { if (e.button === 0) startScrub(e); }} title="Drag to move the playhead · right-click for markers and the loop"
+            onContextMenu={(e) => { e.preventDefault(); scrub(e); setRmenu({ x: e.clientX, y: Math.max(8, e.clientY - 190) }); }}>
             {ticks.map((k, i) => <i key={i} className={"tick" + (k.maj ? " maj" : "")} style={{ left: k.x }} />)}
             {ticks.filter((k) => k.label).map((k, i) => <span key={"l" + i} className="tlab" style={{ left: k.x }}>{k.label}</span>)}
           </div>

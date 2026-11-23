@@ -1015,11 +1015,20 @@ async function renderPlain(out: HTMLCanvasElement, projectIn: Project, t: number
       B.fillStyle = "#000";
       const fillPoly = (pts: [number, number][]) => { B.beginPath(); pts.forEach(([px, py], n) => (n ? B.lineTo(px, py) : B.moveTo(px, py))); B.closePath(); };
       if (tmk.edge) { fillPoly(tmk.edge.near); B.fill(); B.save(); fillPoly(tmk.edge.far); B.clip(); }
+      // the text's own mask (it can be masked too): only the letters it lets show do the masking
+      const own = maskOutline(project, tmk.by, t);
+      if (own) {
+        const op = new Path2D();
+        if (own.invert) op.rect(-1e5, -1e5, 2e5, 2e5);
+        for (const r of own.rings) { r.forEach(([px, py], n) => (n ? op.lineTo(px, py) : op.moveTo(px, py))); op.closePath(); }
+        B.save(); B.clip(op, own.invert ? "evenodd" : "nonzero");
+      }
       if (L) {
         const c = B as Ctx & { letterSpacing: string; wordSpacing: string };
         c.font = L.font; c.letterSpacing = `${L.spacing}px`; c.wordSpacing = `${L.wordSpacing}px`; c.textBaseline = L.central ? "middle" : "alphabetic";
         for (const pc of L.pieces) { B.save(); B.globalAlpha = pc.o; B.transform(...pc.m); B.fillText(pc.text, pc.x, pc.y); B.restore(); }
       }
+      if (own) B.restore();
       if (tmk.edge) B.restore();
       A.setTransform(1, 0, 0, 1, 0, 0); A.globalCompositeOperation = tmk.invert ? "destination-out" : "destination-in"; A.drawImage(ib, 0, 0); A.globalCompositeOperation = "source-over";
       w.save(); w.setTransform(1, 0, 0, 1, 0, 0); w.drawImage(ia, 0, 0); w.restore();

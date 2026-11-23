@@ -166,16 +166,21 @@ function TextMaskDefs({ project, item, s, t }: { project: Project; item: Item; s
       fontFamily={by.fontFamily ? `"${by.fontFamily}", ${appSans()}` : appSans()} fontSize={L.size} fontWeight={by.fontWeight ?? 800} fontStyle={by.italic ? "italic" : undefined}
       dominantBaseline={L.central ? "central" : undefined} style={{ letterSpacing: `${L.spacing}px`, wordSpacing: `${L.wordSpacing}px`, whiteSpace: "pre" }}>{pc.text}</text>
   )) : null;
+  // the text's own mask (it can be masked too): only the letters it lets show do the masking
+  const own = maskOutline(project, by, t);
+  const ownD = own ? (own.invert ? `M${-1e5} ${-1e5}H${1e5}V${1e5}H${-1e5}Z` : "") + own.rings.map((r) => poly(r)).join("") : null;
+  const lettersOwn = ownD ? <g clipPath={`url(#${id}-own)`}>{letters}</g> : letters;
   const content = (fill: string) => (
     <g fill={fill}>
       {tm.edge && <path d={poly(tm.edge.near)} />}
-      {tm.edge ? <g clipPath={`url(#${id}-far)`}>{letters}</g> : letters}
+      {tm.edge ? <g clipPath={`url(#${id}-far)`}>{lettersOwn}</g> : lettersOwn}
     </g>
   );
   return (
     <svg width={0} height={0} style={{ position: "absolute" }} aria-hidden="true">
       <defs>
         {tm.edge && <clipPath id={`${id}-far`} clipPathUnits="userSpaceOnUse"><path d={poly(tm.edge.far)} /></clipPath>}
+        {ownD && <clipPath id={`${id}-own`} clipPathUnits="userSpaceOnUse"><path d={ownD} clipRule={own!.invert ? "evenodd" : "nonzero"} /></clipPath>}
         <mask id={id} maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x={-1e5} y={-1e5} width={2e5} height={2e5}>
           {tm.invert ? <><rect x={-1e5} y={-1e5} width={2e5} height={2e5} fill="#fff" />{content("#000")}</> : content("#fff")}
         </mask>

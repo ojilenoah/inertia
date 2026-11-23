@@ -639,7 +639,15 @@ function MaskAndRepeat({ item, only }: { item: Item; only?: "mask" }) {
         </select>
       </Row>}
       {item.mask?.edge && item.mask.edge !== "shape" && <p className="hint">The cut follows that side of the other item's real outline (a circle cuts along its curve). This item shows on the other side and through the near half of the shape, and is hidden past that edge — like coming out of a hole.</p>}
-      {item.mask && <Row label="Keep"><Seg value={item.mask.invert ? "out" : "in"} options={[["in", "Inside"], ["out", "Outside"]]} onChange={(v) => setI((it) => { it.mask = { ...it.mask!, invert: v === "out" }; })} /></Row>}
+      {/* a hollow shape: which of its edges does the cutting */}
+      {item.mask && (() => { const by = project.items.find((q) => q.id === item.mask!.by); return by && numAt(by, "hollow", Math.max(0, st().t - by.start)) > 0.5; })() && (
+        item.mask.edge && item.mask.edge !== "shape"
+          ? <Row label="Which edge"><Seg value={item.mask.inner ? "inner" : "outer"} options={[["outer", "Outer edge"], ["inner", "Inner edge", "The edge of the hole: it goes into the hole and comes out of it"]]} onChange={(v) => setI((it) => { it.mask = { ...it.mask!, inner: v === "inner" || undefined, whole: undefined }; })} /></Row>
+          : <Row label="Cut with"><Seg value={item.mask.inner ? "hole" : item.mask.whole ? "whole" : "rim"} options={[["rim", "The rim"], ["hole", "The hole"], ["whole", "Whole shape"]]} onChange={(v) => setI((it) => { it.mask = { ...it.mask!, inner: v === "hole" || undefined, whole: v === "whole" || undefined }; })} /></Row>
+      )}
+      {item.mask && <Row label="Keep"><Seg value={item.mask.through && item.mask.edge && item.mask.edge !== "shape" ? "through" : item.mask.invert ? "out" : "in"}
+        options={item.mask.edge && item.mask.edge !== "shape" ? [["in", "Inside"], ["out", "Outside"], ["through", "Through", "It goes in at the edge and comes out the other side"]] : [["in", "Inside"], ["out", "Outside"]]}
+        onChange={(v) => setI((it) => { it.mask = { ...it.mask!, invert: v === "out", through: v === "through" || undefined }; })} /></Row>}
       {item.mask && <Row label="Moving the mask"><Seg value={item.mask.free ? "free" : "along"} options={[["along", "Takes this along", "Drag the mask on the canvas and this item moves with it, keeping its place inside"], ["free", "Leaves this put", "The mask moves over this item, revealing other parts of it"]]} onChange={(v) => setI((it) => { it.mask = { ...it.mask!, free: v === "free" || undefined }; })} /></Row>}
       {item.mask && <Row label="The shape"><Seg value={item.mask.inside ? "show" : "hide"} options={[["show", "Shown"], ["hide", "Hidden"]]} onChange={(v) => setI((it) => { it.mask = { ...it.mask!, inside: v === "show" || undefined }; })} /></Row>}
       {item.mask && <p className="hint">{item.mask.inside ? "The shape shows too. Layers work as usual: put this item above the shape to see it on top." : "The shape itself is hidden; move or animate it to reveal this item."}</p>}

@@ -127,33 +127,6 @@ function clipHalf(poly: Pt[], inside: (p: Pt) => boolean, cross: (a: Pt, b: Pt) 
   }
   return out;
 }
-/**
- * Clipping by one edge of an item's outline as you see it (a circle turned into an ellipse in 3D cuts along the
- * ellipse): the masked item stays visible on the near side of the outline's middle line and inside the far half
- * of the shape, and is hidden past that far edge. Worked out on screen, in the item's own (turned) direction.
- */
-function edgeRegion(world: Pt[], cx0: number, cy0: number, rz: number, edge: string): Pt[][] {
-  const c = Math.cos(-rz * rad), n = Math.sin(-rz * rad), cb = Math.cos(rz * rad), nb = Math.sin(rz * rad);
-  const into = ([x, y]: Pt): Pt => { const dx = x - cx0, dy = y - cy0; return [dx * c - dy * n, dx * n + dy * c]; };
-  const back = ([x, y]: Pt): Pt => [cx0 + x * cb - y * nb, cy0 + x * nb + y * cb];
-  const q = world.map(into), xs = q.map((p) => p[0]), ys = q.map((p) => p[1]);
-  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-  const mx = (x0 + x1) / 2, my = (y0 + y1) / 2, B = 1e5;
-  const across = edge === "left" || edge === "right", mid = across ? mx : my;
-  const free: Record<string, Pt[]> = {
-    right: [[-B, -B], [mx, -B], [mx, B], [-B, B]],
-    left: [[mx, -B], [B, -B], [B, B], [mx, B]],
-    bottom: [[-B, -B], [B, -B], [B, my], [-B, my]],
-    top: [[-B, my], [B, my], [B, B], [-B, B]],
-  };
-  const far = (p: Pt) => (edge === "right" ? p[0] >= mx : edge === "left" ? p[0] <= mx : edge === "bottom" ? p[1] >= my : p[1] <= my);
-  const cross = (a: Pt, b: Pt): Pt => {
-    const k = across ? (mid - a[0]) / (b[0] - a[0] || 1e-9) : (mid - a[1]) / (b[1] - a[1] || 1e-9);
-    return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
-  };
-  const half = clipHalf(q, far, cross);
-  return (half.length > 2 ? [free[edge], half] : [free[edge]]).map((r) => r.map(back));
-}
 /** For an edge cut: the open half on the near side of the outline's middle line, and the half past it (on the canvas). */
 function edgeHalves(world: Pt[], cx0: number, cy0: number, rz: number, edge: string): { near: Pt[]; far: Pt[] } {
   const c = Math.cos(-rz * rad), n = Math.sin(-rz * rad), cb = Math.cos(rz * rad), nb = Math.sin(rz * rad);
@@ -184,6 +157,39 @@ function edgeBox(edge: string, x0: number, y0: number, x1: number, y1: number): 
   return boxes[edge];
 }
 /** The mask outline(s) on the canvas at time t (or null). A group masks with all of its items together. */
+/**
+ * An edge cut in the mask shape's own frame: the open side up to its middle line (a big half-plane), and the part of
+ * its outline past that line — both put on the canvas through its turn, 3D tilt and scale.
+ */
+function edgeRegionLocal(ms: ItemState, m: Item, loc: Pt[], edge: string): { free: Pt[]; far: Pt[] | null } {
+  const across = edge === "left" || edge === "right", mid = across ? m.w / 2 : m.h / 2;
+  const isFar = (p: Pt) => (edge === "right" ? p[0] >= mid : edge === "left" ? p[0] <= mid : edge === "bottom" ? p[1] >= mid : p[1] <= mid);
+  const cross = (a: Pt, b: Pt): Pt => {
+    const k = across ? (mid - a[0]) / (b[0] - a[0] || 1e-9) : (mid - a[1]) / (b[1] - a[1] || 1e-9);
+    return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
+  };
+  const half = clipHalf(loc, isFar, cross);
+  const far = half.length > 2 ? half.map((p) => toWorld(ms, m, p)) : null;
+  // the middle line on the canvas, and which side of it is the open (near) side
+  const K = Math.max(m.w, m.h);
+  const p1 = toWorld(ms, m, across ? [mid, -K] : [-K, mid]), p2 = toWorld(ms, m, across ? [mid, m.h + K] : [m.w + K, mid]);
+  const nearPt = toWorld(ms, m, edge === "right" ? [0, m.h / 2] : edge === "left" ? [m.w, m.h / 2] : edge === "bottom" ? [m.w / 2, 0] : [m.w / 2, m.h]);
+  let dx = p2[0] - p1[0], dy = p2[1] - p1[1];
+  const L = Math.hypot(dx, dy) || 1; dx /= L; dy /= L;
+  let nx = -dy, ny = dx;
+  if ((nearPt[0] - p1[0]) * nx + (nearPt[1] - p1[1]) * ny < 0) { nx = -nx; ny = -ny; }
+  const B = 1e5, a: Pt = [p1[0] - dx * B, p1[1] - dy * B], b: Pt = [p2[0] + dx * B, p2[1] + dy * B];
+  return { free: [a, b, [b[0] + nx * B, b[1] + ny * B], [a[0] + nx * B, a[1] + ny * B]], far };
+}
+/** A hollow item's hole (the same shape, the rim's thickness in) on the canvas; null when it isn't hollow. */
+function holeOutline(project: Project, m: Item, t: number): Pt[] | null {
+  const th = Math.min(numAt(m, "hollow", Math.min(Math.max(t, m.start), m.end) - m.start), Math.min(m.w, m.h) / 2 - 1);
+  if (!(th > 0.5)) return null;
+  const inner = localOutline(m, t, m.w - 2 * th, m.h - 2 * th);
+  if (!inner || inner.length < 3) return null;
+  const ms = itemState(project, m, t);
+  return inner.map(([u, v]) => toWorld(ms, m, [u + th, v + th]));
+}
 export function maskOutline(project: Project, item: Item, t: number): { pts: Pt[]; rings: Pt[][]; invert: boolean } | null {
   const mk = maskOf(project, item);
   const by = mk?.by;
@@ -207,9 +213,24 @@ export function maskOutline(project: Project, item: Item, t: number): { pts: Pt[
   if (!m || !specOf(m)) return null;
   // clipping along one edge of its real outline (in the item's own turned / tilted frame)
   if (edge && ["left", "right", "top", "bottom"].includes(edge)) {
-    const ms = itemState(project, m, t), world = outlineOf(project, m, t);
-    if (!world) return null;
-    const rings = edgeRegion(world, ms.x, ms.y, ms.rz, edge).map(clockwise);
+    // worked out in the shape's own frame and put on the canvas, so the cut follows it when it's tilted in 3D.
+    // A hollow shape's inner edge: the cut follows the hole's side (things go into the hole and come out of it)
+    const ms = itemState(project, m, t);
+    const th = mk!.inner ? Math.min(numAt(m, "hollow", Math.min(Math.max(t, m.start), m.end) - m.start), Math.min(m.w, m.h) / 2 - 1) : 0;
+    const loc = th > 0.5 ? localOutline(m, t, m.w - 2 * th, m.h - 2 * th)?.map(([u, v]) => [u + th, v + th] as Pt) : localOutline(m, t);
+    if (!loc || loc.length < 3) return null;
+    const { free, far } = edgeRegionLocal(ms, m, loc, edge);
+    // Through: hidden only in the shape's far half, so it comes out again past it. On a hollow shape's inner edge:
+    // hidden in the far half of the rim (between the inner and outer edges) — in at the inner line, out at the outer
+    if (mk!.through) {
+      if (th > 0.5) {
+        const outer = localOutline(m, t), of = outer && outer.length > 2 ? edgeRegionLocal(ms, m, outer, edge).far : null;
+        if (of && far) return { pts: of, rings: [clockwise(of), clockwise(far)], invert: true };
+        if (of) return { pts: of, rings: [clockwise(of)], invert: true };
+      }
+      return far ? { pts: far, rings: [clockwise(far)], invert: true } : null;
+    }
+    const rings = (far ? [free, far] : [free]).map(clockwise);
     return { pts: rings[0], rings, invert };
   }
   if (edge && edge !== "shape") {
@@ -219,7 +240,20 @@ export function maskOutline(project: Project, item: Item, t: number): { pts: Pt[
     return { pts: r, rings: [r], invert };
   }
   const r = outlineOf(project, m, t);
-  return r ? { pts: r, rings: [r], invert } : null;
+  if (!r) return null;
+  // a hollow shape's hole on its own
+  if (mk!.inner) { const h = holeOutline(project, m, t); if (h) return { pts: h, rings: [h], invert }; }
+  // a hollow shape masks with its rim: the hole (the same shape, the rim's thickness in) is cut out of it
+  const th = mk!.whole ? 0 : Math.min(numAt(m, "hollow", Math.min(Math.max(t, m.start), m.end) - m.start), Math.min(m.w, m.h) / 2 - 1);
+  if (th > 0.5) {
+    const inner = localOutline(m, t, m.w - 2 * th, m.h - 2 * th);
+    if (inner && inner.length > 2) {
+      const ms = itemState(project, m, t);
+      const hole = clockwise(inner.map(([u, v]) => toWorld(ms, m, [u + th, v + th]))).reverse();
+      return { pts: r, rings: [clockwise(r), hole], invert };
+    }
+  }
+  return { pts: r, rings: [r], invert };
 }
 /** CSS clip-path for the masked item (its own box coordinates). */
 /* ---------------- text masks: the letters themselves ---------------- */

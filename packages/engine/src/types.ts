@@ -136,7 +136,13 @@ export interface Item {
     /** true: moving the mask on the canvas leaves this item where it is (by default it moves along with its mask). */
     free?: boolean;
     /** What clips: its shape (default), or one of its edges — this item is hidden only past that edge (it goes "into" the other item there) — or two opposite edges. */
-    edge?: "shape" | "top" | "bottom" | "left" | "right" | "width" | "height" | "above" | "below" };
+    edge?: "shape" | "top" | "bottom" | "left" | "right" | "width" | "height" | "above" | "below";
+    /** A hollow mask shape cuts with its rim (the hole doesn't count) unless this is set: then the whole shape. */
+    whole?: boolean;
+    /** A hollow mask shape: use its inner edge (the hole) — an edge cut follows the hole's side, a shape cut is the hole. */
+    inner?: boolean;
+    /** Edge cuts: hidden only while it's in the far half of the shape, then it comes out the other side. */
+    through?: boolean };
   /** Draw extra copies, each one offset, turned, scaled, faded and delayed a bit more. */
   repeat?: { count: number; dx: number; dy: number; rotate: number; scale: number; fade: number; delay: number };
   /** Hollow: how thick the rim is (px) when the middle is cut out — the hole is the same shape, rounding and all. 0 = solid. */
