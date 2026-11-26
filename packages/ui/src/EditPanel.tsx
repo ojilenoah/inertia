@@ -896,7 +896,9 @@ export function EditPanel() {
   }
   if (sheet) {
     const vb = document.querySelector(".ws .viewer")?.getBoundingClientRect().bottom ?? innerHeight * 0.55;
-    x = 4; cardW = innerWidth - 8; y = Math.round(vb + 4); maxH = Math.max(160, innerHeight - y - 4); above = false;
+    // inside the app's area (it stops short of the phone's status and navigation bars)
+    const mo = document.querySelector(".mo")?.getBoundingClientRect() ?? { left: 0, width: innerWidth, bottom: innerHeight };
+    x = mo.left + 4; cardW = mo.width - 8; y = Math.round(vb + 4); maxH = Math.max(160, mo.bottom - y - 4); above = false;
   }
   const show = !!panel && (panel.section === "scene" || !!item || !!group);
 

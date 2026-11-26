@@ -2,6 +2,9 @@
 @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@300..800&family=Sora:wght@300..800&family=Poppins:ital,wght@0,300;0,400;0,600;0,800;0,900;1,400;1,800&family=Montserrat:ital,wght@0,300..900;1,300..900&family=Unbounded:wght@300..900&family=Anton&family=Oswald:wght@300..700&family=Righteous&family=Fraunces:ital,wght@0,300..900;1,300..900&family=Lora:ital,wght@0,400..700;1,400..700&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Pacifico&family=Permanent+Marker&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300..900;1,300..900&family=Space+Grotesk:wght@300..700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=DM+Serif+Display:ital@0;1&family=Bebas+Neue&family=Archivo+Black&family=Syne:wght@400..800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@300..800&family=Caveat:wght@400..700&display=swap");
 
+/* the phone's status bar, navigation bar and camera cutout: the app stays clear of them (the Android app fills in
+   --sa-* itself; elsewhere the browser's safe-area insets apply) */
+:root { --sa-t: env(safe-area-inset-top, 0px); --sa-r: env(safe-area-inset-right, 0px); --sa-b: env(safe-area-inset-bottom, 0px); --sa-l: env(safe-area-inset-left, 0px); }
 .mo {
   --bg: #dedcd7; --panel: #fff; --panel-2: #f6f5f2; --panel-3: #eeede9;
   --line: #e6e4df; --line-2: #d3d0c8; --ink: #121211; --ink-2: #55534e; --ink-3: #6d6b66;
@@ -9,10 +12,13 @@
   --violet: #7b4dff; --blue: #3a5bff; --green: #1f9d63; --orange: #e0571a; --pink: #d9338a; --teal: #0e9aa8; --gray: #7a7771;
   --r: 4px;
   --sans: "Geist", ui-sans-serif, system-ui, sans-serif; --mono: "Geist Mono", ui-monospace, monospace;
-  position: fixed; inset: 0; background: var(--bg); color: var(--ink);
+  position: fixed; inset: var(--sa-t) var(--sa-r) var(--sa-b) var(--sa-l); background: var(--bg); color: var(--ink);
   font: 13px/1.35 var(--sans); -webkit-font-smoothing: antialiased; user-select: none; overflow: hidden;
   color-scheme: light;
 }
+/* the app's background also fills the strips behind those bars */
+.mo::before { content: ""; position: fixed; inset: 0; z-index: -1; background: var(--bg); pointer-events: none; }
+.mo:has(.home)::before { background: var(--panel); }
 .mo[data-theme="dark"] {
   --bg: #050506; --panel: #141416; --panel-2: #1b1b1e; --panel-3: #232327;
   --line: #26262a; --line-2: #34343a; --ink: #ededea; --ink-2: #b0afaa; --ink-3: #8f8e89; --lane: #111113;
@@ -216,7 +222,7 @@ button.chip:hover { color: var(--ink); }
 .tog.on { background: var(--ink); } .tog.on::after { left: 14px; background: var(--panel); }
 .fxrow { display: flex; align-items: center; gap: 8px; height: 32px; } .fxrow .nm { flex: 1; font-size: 12px; }
 
-.toast { position: fixed; left: 50%; bottom: 22px; background: var(--ink); color: var(--panel); padding: 8px 14px; border-radius: 4px; font-size: 12px; z-index: 100; pointer-events: none; }
+.toast { position: fixed; left: 50%; bottom: calc(var(--sa-b) + 22px); background: var(--ink); color: var(--panel); padding: 8px 14px; border-radius: 4px; font-size: 12px; z-index: 100; pointer-events: none; }
 .placeholder { position: absolute; inset: 52px 3px 3px; border-radius: var(--r); background: var(--panel); display: grid; place-items: center; color: var(--ink-3); }
 
 /* canvas track */
@@ -1273,13 +1279,13 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .mo.phone .pbar .chip { height: 20px; padding: 0 4px; font-size: 9.5px; margin: 0 2px 0 auto; }
 .mo.phone .pbar .chip + .chip { display: none; } /* the zoom readout: just information */
 /* History lives in the sidebar on phones; its list opens beside it */
-.rail .histpop { position: fixed; top: 8px; left: 50px; bottom: auto; }
+.rail .histpop { position: fixed; top: calc(var(--sa-t) + 8px); left: calc(var(--sa-l) + 50px); bottom: auto; }
 /* phones: a slimmer track toolbar and a thinner time ruler (seeker) */
 /* phones: thin track rows (same size on screen at any interface size; the timeline sets --rowh / --clippad) */
 .mo.phone .cvdock, .mo.phone .cvdock .lrow.canvas { height: var(--rowh); }
 .mo.phone .cvdock .lrow.canvas .clip.cvseg { top: var(--clippad) !important; height: calc(var(--rowh) - 2 * var(--clippad)) !important; }
 /* phones: the grid options open above the play bar (the bar would cut them off) */
-.mo.phone .gridpop { position: fixed; right: 8px; bottom: 46px; width: min(280px, calc(100vw - 16px)); }
+.mo.phone .gridpop { position: fixed; right: calc(var(--sa-r) + 8px); bottom: calc(var(--sa-b) + 46px); width: min(280px, calc(100vw - 16px)); }
 /* motion polish: buttons ease between states and give a little when pressed; views and panels fade in as they appear
    (:where keeps these weaker than any button's own rules) */
 :where(.mo) button { transition: background-color .14s ease, color .14s ease, box-shadow .14s ease, opacity .14s ease, scale .12s ease; }
@@ -1369,7 +1375,7 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .mo.phone .ws > .pbar .pbmid { align-self: center; }
 .mo.phone .ws > .pbar .pbbot { align-self: end; }
 .mo.phone .ws > .pbar .pbmid .transport { flex-direction: column; gap: 2px; }
-.mo.phone .ws > .pbar .histpop { position: fixed; top: 8px; right: 46px; left: auto; bottom: auto; }
+.mo.phone .ws > .pbar .histpop { position: fixed; top: calc(var(--sa-t) + 8px); right: calc(var(--sa-r) + 46px); left: auto; bottom: auto; }
 .mo.phone .ws > .pbar .tmods { margin-bottom: 2px; }
 .mo.phone .tlbar .tsort { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; flex: none; }
 /* group icon (folds the group) */
@@ -1413,7 +1419,7 @@ body .fbar.under .ib { width: 28px; height: 26px; }
 .lineedit .lplus.on path { stroke: #111; }
 .lineedit .lext { fill: transparent; pointer-events: all; cursor: crosshair; }
 .lineedit .lprev { stroke: var(--sel); stroke-dasharray: 6 5; stroke-linecap: round; fill: none; pointer-events: none; opacity: .8; }
-.linehint { position: fixed; left: 50%; top: 10px; transform: translateX(-50%); z-index: 130; display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; border-radius: 10px; font: 500 12px var(--sans); color: var(--ink); background: color-mix(in srgb, var(--panel) 80%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); box-shadow: 0 0 0 1px var(--line), 0 10px 28px -10px rgba(0,0,0,.5); white-space: nowrap; }
+.linehint { position: fixed; left: 50%; top: calc(var(--sa-t) + 10px); transform: translateX(-50%); z-index: 130; display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; border-radius: 10px; font: 500 12px var(--sans); color: var(--ink); background: color-mix(in srgb, var(--panel) 80%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); box-shadow: 0 0 0 1px var(--line), 0 10px 28px -10px rgba(0,0,0,.5); white-space: nowrap; }
 .linehint span { color: var(--ink-3); }
 .linehint button { height: 26px; padding: 0 12px; border-radius: 7px; background: var(--ink); color: var(--panel); font-weight: 600; }
 /* selection boxes: their own layer above the canvas looks and screen effects, moving with the canvas */

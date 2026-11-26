@@ -137,6 +137,20 @@ jobs:
       - name: Generate Android project
         working-directory: apps/app
         run: npx tauri android init --ci
+      # the generated project comes with Tauri's own icon and a plain activity: put in the app's logo (icons/android)
+      # and the activity that keeps the page clear of the status and navigation bars (android/MainActivity.kt)
+      - name: Add the app's logo and activity
+        working-directory: apps/app/src-tauri
+        run: |
+          set -e
+          res=gen/android/app/src/main/res
+          cp -r icons/android/. "$res/"
+          main="$(find gen/android/app/src/main -name MainActivity.kt | head -n1)"
+          test -n "$main"
+          pkg="$(grep -m1 '^package ' "$main")"
+          sed "s|^package .*|$pkg|" android/MainActivity.kt > "$main"
+          echo "icons → $res, activity → $main ($pkg)"
+          ls "$res"/mipmap-anydpi-v26
       # signed automatically (Android's debug signing, nothing to set up), but the Rust core is built optimised and
       # stripped like the Windows version: that's what keeps the APK small (an unoptimised debug core is ~100 MB)
       # always the same debug key (kept in the repo, like any Android project's debug.keystore): a phone then offers

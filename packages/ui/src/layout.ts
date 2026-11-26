@@ -41,8 +41,8 @@ export function applyUiScale(k: number) {
   }
   const m = document.querySelector('meta[name="viewport"]');
   if (!m) return;
-  m.setAttribute("content", s === 1 ? "width=device-width, initial-scale=1.0"
-    : `width=device-width, initial-scale=${s}, minimum-scale=${s}, maximum-scale=${s}, user-scalable=no`);
+  m.setAttribute("content", s === 1 ? "width=device-width, initial-scale=1.0, viewport-fit=cover"
+    : `width=device-width, initial-scale=${s}, minimum-scale=${s}, maximum-scale=${s}, user-scalable=no, viewport-fit=cover`);
   // what the browser actually did (a desktop browser ignores it and stays at 1)
   const read = () => setApplied(Math.round((window.visualViewport?.scale ?? 1) * 100) / 100);
   requestAnimationFrame(() => requestAnimationFrame(read));

@@ -12,6 +12,7 @@ import { copyKeyframe, copyStyle, nudge, pasteKeyframe, pasteStyle, copyPickedKe
 import { Home } from "./Home";
 import { TitleBar, hasTitleBar } from "./TitleBar";
 import { installTouch } from "./touch";
+import { installSystemBars, setBarsDark } from "./systembars";
 import { PhoneDim } from "./PhoneDim";
 import { ConfirmBubble } from "./Confirm";
 import { ExportDialog } from "./Export";
@@ -204,6 +205,9 @@ export function Editor() {
   const framed = hasTitleBar();
   // touch screens: long-press, double-tap, two-finger gestures and the sticky modifier keys
   useEffect(() => installTouch(), []);
+  // Android: keep clear of the status and navigation bars, with their icons matching the theme
+  useEffect(() => installSystemBars(), []);
+  useEffect(() => setBarsDark(ui.theme === "dark"), [ui.theme]);
   useEffect(() => applyUiScale(ui.uiScale ?? 1), [ui.uiScale]);
   return (
     <div className={"mo" + (framed ? " framed" : "") + (stacked ? " phone" : "") + (stacked && (ui.panel || ui.ctx) ? " dimmed" : "") + (stacked && (selectedId || ui.selGroup) ? " selbar" : "")} data-theme={ui.theme} style={vars as React.CSSProperties} onContextMenu={(e) => e.preventDefault()}>
