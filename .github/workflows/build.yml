@@ -121,9 +121,15 @@ jobs:
         run: |
           sdkmanager --install "ndk;27.0.12077973"
           echo "NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.0.12077973" >> "$GITHUB_ENV"
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android
+      # Rust for Android: the runner already has rustup; downloads can hiccup, so each step tries up to 4 times
+      - name: Set up Rust (with the Android target)
+        run: |
+          for i in 1 2 3 4; do
+            rustup toolchain install stable --profile minimal --no-self-update && rustup default stable && rustup target add aarch64-linux-android && break
+            echo "Rust setup failed (try $i), retrying in 20s"; sleep 20
+            [ "$i" = 4 ] && exit 1
+          done
+          rustc --version
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: apps/app/src-tauri
