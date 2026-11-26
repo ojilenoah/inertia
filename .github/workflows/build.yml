@@ -2,7 +2,7 @@
 # Every push to main (or a manual run from the Actions tab) makes a new Release on the repository's
 # Releases page (right-hand side of the repo's front page) with:
 #   - the Windows installer (.exe) and .msi
-#   - the Android .apk (debug-signed, installs directly on a phone) — when that build succeeds
+#   - the Android .apk (arm64, signed automatically, installs directly on a phone) — when that build succeeds
 name: build
 
 on:
@@ -131,17 +131,31 @@ jobs:
       - name: Generate Android project
         working-directory: apps/app
         run: npx tauri android init --ci
-      - name: Build APK (arm64, debug-signed so it installs without a keystore)
+      # signed automatically (Android's debug signing, nothing to set up), but the Rust core is built optimised and
+      # stripped like the Windows version: that's what keeps the APK small (an unoptimised debug core is ~100 MB)
+      - name: Build the APK (arm64)
         working-directory: apps/app
-        run: npx tauri android build --apk --debug --target aarch64
+        env:
+          CARGO_PROFILE_DEV_OPT_LEVEL: "s"
+          CARGO_PROFILE_DEV_DEBUG: "0"
+          CARGO_PROFILE_DEV_STRIP: "true"
+          CARGO_PROFILE_DEV_DEBUG_ASSERTIONS: "false"
+          CARGO_PROFILE_DEV_OVERFLOW_CHECKS: "false"
+          CARGO_PROFILE_DEV_INCREMENTAL: "false"
+        run: |
+          set -e
+          npx tauri android build --apk --debug --target aarch64
+          mkdir -p "$GITHUB_WORKSPACE/apk-out"
+          cp "$(find src-tauri/gen/android/app/build/outputs/apk -name '*.apk' | head -n1)" "$GITHUB_WORKSPACE/apk-out/Inertia_arm64.apk"
+          ls -lh "$GITHUB_WORKSPACE/apk-out"
       - uses: actions/upload-artifact@v4
         with:
           name: inertia-android
-          path: apps/app/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          path: apk-out/*.apk
       - name: Add the APK to the Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
           name: Build ${{ github.run_number }}
-          files: apps/app/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          files: apk-out/*.apk
           fail_on_unmatched_files: false
