@@ -4,6 +4,8 @@
 
 /* the phone's status bar, navigation bar and camera cutout: the app stays clear of them (the Android app fills in
    --sa-* itself; elsewhere the browser's safe-area insets apply) */
+/* the page itself never scrolls or bounces (only lists inside the app do) */
+html, body { overflow: hidden; overscroll-behavior: none; }
 :root { --sa-t: env(safe-area-inset-top, 0px); --sa-r: env(safe-area-inset-right, 0px); --sa-b: env(safe-area-inset-bottom, 0px); --sa-l: env(safe-area-inset-left, 0px); }
 .mo {
   --bg: #dedcd7; --panel: #fff; --panel-2: #f6f5f2; --panel-3: #eeede9;

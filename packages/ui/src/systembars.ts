@@ -1,7 +1,9 @@
 /* the phone's status and navigation bars (Android app): the app draws under them, and the native side reports
    their sizes so the layout keeps clear of them (CSS --sa-t/r/b/l, see styles.css). In a browser this does nothing
    and the browser's own safe-area insets apply. */
-type Insets = { t: number; r: number; b: number; l: number };
+import { setViewSize } from "./layout";
+
+type Insets = { t: number; r: number; b: number; l: number; w?: number; h?: number };
 type Bars = { insets(): string; setDark(dark: boolean): void };
 
 const bars = (): Bars | undefined => (window as unknown as { InertiaBars?: Bars }).InertiaBars;
@@ -11,6 +13,7 @@ let last: Insets | null = null, shown = "";
 const apply = (o: Insets | null) => {
   if (!o) return;
   last = o;
+  if (o.w && o.h) setViewSize(o.w, o.h); // the interface size is laid out from the screen's real width
   const k = window.visualViewport?.scale || 1, px = (v: number) => `${Math.round((v / k) * 10) / 10}px`;
   const next = [o.t, o.r, o.b, o.l].map(px);
   if (next.join() === shown) return;
