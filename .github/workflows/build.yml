@@ -144,8 +144,9 @@ jobs:
       - name: Use the project's debug signing key
         run: |
           for d in "$HOME/.android" "${ANDROID_USER_HOME:-}"; do
-            [ -n "$d" ] && mkdir -p "$d" && cp apps/app/src-tauri/android-debug.keystore "$d/debug.keystore"
+            if [ -n "$d" ]; then mkdir -p "$d"; cp apps/app/src-tauri/android-debug.keystore "$d/debug.keystore"; fi
           done
+          ls -l "$HOME/.android/debug.keystore"
       - name: Build the APK (arm64)
         working-directory: apps/app
         env:
