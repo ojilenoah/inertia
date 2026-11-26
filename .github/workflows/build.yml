@@ -133,6 +133,13 @@ jobs:
         run: npx tauri android init --ci
       # signed automatically (Android's debug signing, nothing to set up), but the Rust core is built optimised and
       # stripped like the Windows version: that's what keeps the APK small (an unoptimised debug core is ~100 MB)
+      # always the same debug key (kept in the repo, like any Android project's debug.keystore): a phone then offers
+      # each new build as an update to the installed app instead of refusing it
+      - name: Use the project's debug signing key
+        run: |
+          for d in "$HOME/.android" "${ANDROID_USER_HOME:-}"; do
+            [ -n "$d" ] && mkdir -p "$d" && cp apps/app/src-tauri/android-debug.keystore "$d/debug.keystore"
+          done
       - name: Build the APK (arm64)
         working-directory: apps/app
         env:
