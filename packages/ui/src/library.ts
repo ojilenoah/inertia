@@ -30,7 +30,10 @@ async function tx<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBReq
 export async function listProjects(): Promise<LibEntry[]> {
   try {
     const all = await tx<LibEntry[]>("readonly", (s) => s.getAll() as IDBRequest<LibEntry[]>);
-    return all.sort((a, b) => b.updated - a.updated);
+    // an untouched start-up copy that an older version saved by mistake: not a project anyone made, so it goes
+    const stray = all.filter((e) => isStartupSample(e.project));
+    for (const e of stray) tx("readwrite", (s) => s.delete(e.id)).catch(() => {});
+    return all.filter((e) => !stray.includes(e)).sort((a, b) => b.updated - a.updated);
   } catch { return []; }
 }
 /** Projects deleted this session: never write them back. */
@@ -43,6 +46,16 @@ function isPristineDemo(p: Project) {
   return p.name === d.name && key(p) === key(d);
 }
 
+/**
+ * The demo copy the editor holds before you open anything (a first start, or no quick-save copy yet). Opening a
+ * project saves the one you were in first; this one, untouched, isn't anything you made, so it's never saved.
+ */
+const isStartupSample = (p: Project) => {
+  if (typeof p?.id !== "string" || !p.id.startsWith("sample_")) return false;
+  const c = JSON.parse(JSON.stringify(p)) as Project; normalizeProject(c);
+  return isPristineDemo(c);
+};
+
 /** Tell the header how saving the open project went (only the open project shows a warning). */
 function report(p: Project, issue: string | null) {
   const s = useStore.getState();
@@ -54,7 +67,7 @@ const why = (e: unknown) => {
 };
 
 export async function putProject(p: Project, toDisk = true, updated = Date.now(), synced?: number) {
-  if (deleted.has(p.id)) return;
+  if (deleted.has(p.id) || isStartupSample(p)) return;
   // never write picture references (from the quick-save copy) to the library or the files: put the pictures back
   if (hasPictureRefs(JSON.stringify(p))) {
     const { json, missing } = await unpackPictures(JSON.stringify(p));
