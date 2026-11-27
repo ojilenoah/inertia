@@ -50,7 +50,7 @@ function setRowSize(phone: boolean, uiScale: number) {
   const k = Math.min(1, Math.max(0.5, uiScale || 1));
   // phones: rows only a little taller than their clips (no lines between them), so more tracks fit; the same size
   // on screen at any interface size
-  ROW_H = phone ? Math.round(28 / k) : 32;
+  ROW_H = phone ? Math.round(34 / k) : 32;
   CLIP_PAD = phone ? Math.round(1.5 / k) : 4;
   CV_H = phone ? Math.round(40 / k) : ROW_H;
 }
