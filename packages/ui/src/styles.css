@@ -1106,6 +1106,8 @@ button.hrow:hover { background: var(--panel-2); color: var(--ink); }
 .gease .emenu-list { left: 0; right: auto; width: 200px; }
 
 /* sound waveforms on clips */
+/* video clips: their frames along them, under the name and the sound wave */
+.clip .film { position: absolute; left: 0; top: 0; pointer-events: none; opacity: .5; }
 .clip .wave { position: absolute; inset: 2px 0; width: 100%; height: calc(100% - 4px); pointer-events: none; opacity: .55; }
 .clip .wave path { stroke: #fff; stroke-width: 1.4px; fill: none; }
 

@@ -4,7 +4,7 @@ import { anim } from "./anim";
 import { ArrayBufferTarget, Muxer } from "mp4-muxer";
 import type { Project } from "@moshion/engine";
 import { useStore } from "./store";
-import { mixAudio, prepare, renderFrame } from "./render";
+import { closeSession, mixAudio, prepare, renderFrame, type RenderSession } from "./render";
 import { GifWriter } from "./gif";
 
 type Phase = { k: "setup" } | { k: "run"; frame: number; total: number; step: string } | { k: "done"; url: string; name: string; size: number; secs: number; audio: boolean } | { k: "error"; msg: string };
@@ -20,14 +20,17 @@ function outSize(project: Project, scale: number, sh: Shape): [number, number] {
   return a >= b ? [even(long), even((long * b) / a)] : [even((long * a) / b), even(long)];
 }
 /** Draws frames at the output size and shape (reframing with bars or cropping when the shape differs). */
+/** The last export's render (its video decoders are let go when the next export starts). */
+let lastSession: RenderSession | null = null;
 async function makeFramer(project: Project, W: number, H: number, sh: Shape, transparent = false) {
+  if (lastSession) { await closeSession(lastSession); lastSession = null; }
   if (sh.aspect === "own") {
-    const rs = await prepare(project, W, H); rs.transparent = transparent;
+    const rs = await prepare(project, W, H); rs.transparent = transparent; lastSession = rs;
     return (out: HTMLCanvasElement, t: number) => renderFrame(out, project, t, rs);
   }
   const k = sh.fit === "fit" ? Math.min(W / project.width, H / project.height) : Math.max(W / project.width, H / project.height);
   const iw = even(project.width * k), ih = even(project.height * k);
-  const rs = await prepare(project, iw, ih); rs.transparent = transparent;
+  const rs = await prepare(project, iw, ih); rs.transparent = transparent; lastSession = rs;
   const tmp = document.createElement("canvas"); tmp.width = iw; tmp.height = ih;
   return async (out: HTMLCanvasElement, t: number) => {
     await renderFrame(tmp, project, t, rs);

@@ -117,8 +117,11 @@ export function placeAsset(a: Asset, at?: number, pos?: { x: number; y: number }
   toast(`${a.name} added`);
 }
 
-/** Keep a <video>/<audio> element in step with the playhead. */
-export function useMediaSync(ref: React.RefObject<HTMLMediaElement | null>, item: Item, url: string | undefined) {
+/**
+ * Keep a <video>/<audio> element in step with the playhead. `exact`: the video engine draws the paused frame
+ * (and plays it backwards), so while paused the element only catches up once the playhead rests, ready to play.
+ */
+export function useMediaSync(ref: React.RefObject<HTMLMediaElement | null>, item: Item, url: string | undefined, exact = false) {
   const t = useStore((s) => s.t);
   const playing = useStore((s) => s.playing);
   const muted = useStore((s) => { const tr = s.project.tracks.find((x) => x.id === item.trackId); return !!tr?.muted; });
@@ -137,9 +140,12 @@ export function useMediaSync(ref: React.RefObject<HTMLMediaElement | null>, item
       if (Math.abs(el.currentTime - local) > 0.3) el.currentTime = local;
     } else {
       if (!el.paused) el.pause();
-      if (Math.abs(el.currentTime - local) > 0.02) el.currentTime = local;
+      if (Math.abs(el.currentTime - local) <= 0.02) return;
+      if (!exact) { el.currentTime = local; return; }
+      const id = setTimeout(() => { el.currentTime = local; }, 250); // not while scrubbing: the engine shows those frames
+      return () => clearTimeout(id);
     }
-  }, [t, playing, muted, vol, url, item.start, item.end, item.mediaOffset, item.speed, item.reverse]);
+  }, [t, playing, muted, vol, url, item.start, item.end, item.mediaOffset, item.speed, item.reverse, exact]);
 }
 
 /** The stored file for a video/audio asset (for export). */

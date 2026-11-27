@@ -2,7 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useStacked } from "./layout";
 import type { PinchDetail } from "./touch";
 import type { Item, ItemState, Project, Prop } from "@moshion/engine";
-import { groupPivot, sampleKeys, addKey, composeRotation, groupChain, magicFrame, blurTrail, cameraAt, lookAt, textShown, stackAt as stackAtTime, stackCompare, boardPos, canvases, itemHidden, itemLocked, resolveFx, resolveScene, transLayers, transitionAt } from "@moshion/engine";
+import { mediaTime, groupPivot, sampleKeys, addKey, composeRotation, groupChain, magicFrame, blurTrail, cameraAt, lookAt, textShown, stackAt as stackAtTime, stackCompare, boardPos, canvases, itemHidden, itemLocked, resolveFx, resolveScene, transLayers, transitionAt } from "@moshion/engine";
 import type { Layer } from "@moshion/engine";
 import { ChartView, ParticlesView } from "./newitems";
 import { BoardPlane, fitCam, useStills, type Cam } from "./Board";
@@ -22,6 +22,8 @@ import { RotationGimbal } from "./Gizmo";
 import { Fader } from "./Fader";
 import { BackgroundLayer, LookOverlays, looksTransform } from "./Looks";
 import { placeAsset, useMediaSync, useMediaURL } from "./media";
+import { ExactFrame, useVideoSource } from "./videoview";
+import { videoSource } from "./videoengine";
 import { GridButton, GridOverlay } from "./Grid";
 import { MotionOverlay, PathDrawLayer, shownMotion } from "./MotionPath";
 import { LineDrawLayer } from "./Shapes";
@@ -30,13 +32,24 @@ import { hollowParts, itemShapeD } from "./shapeMorph";
 import { pathPlace, placeCss, reshapeOutline, RESHAPABLE, maskOutline } from "./extras";
 import { depthStep, itemOutline, lookShadows, maskClipPath, maskFollowers, maskItems, maskOf, mul6, pathGlyphs, pathOffsetAt, repeatCopies, textLetters, textMaskOf, toItemBox, worldToItem, type Glyph } from "./extras";
 
+/**
+ * A video clip. Playing forwards, the <video> element plays it (with its sound); paused, scrubbing or playing
+ * backwards, the video engine draws the exact frame for the playhead over it (the same frame the export uses).
+ */
 function VideoFace({ item }: { item: Item }) {
   const url = useMediaURL(item.src);
   const ref = useRef<HTMLVideoElement>(null);
-  useMediaSync(ref, item, url);
-  return url
-    ? <video ref={ref} src={url} playsInline preload="auto" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: item.fit === "contain" ? "contain" : "cover", transform: `translate(${item.imgX ?? 0}%, ${item.imgY ?? 0}%) scale(${item.imgZoom ?? 1})` }} />
-    : <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#888", font: "500 28px var(--mono)" }}>Loading video…</div>;
+  const src = useVideoSource(item.src);
+  const playing = useStore((s) => s.playing);
+  const t = useStore((s) => s.t);
+  const exact = !!src && (!playing || !!item.reverse);
+  useMediaSync(ref, item, url, !!src);
+  const look: React.CSSProperties = { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: item.fit === "contain" ? "contain" : "cover", transform: `translate(${item.imgX ?? 0}%, ${item.imgY ?? 0}%) scale(${item.imgZoom ?? 1})` };
+  if (!url) return <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#888", font: "500 28px var(--mono)" }}>Loading video…</div>;
+  return <>
+    <video ref={ref} src={url} playsInline preload="auto" style={look} />
+    {src && <ExactFrame src={src} time={mediaTime(item, t - item.start, src.dur)} active={exact} style={look} />}
+  </>;
 }
 function AudioPlayer({ item }: { item: Item }) {
   const url = useMediaURL(item.src);
@@ -302,8 +315,20 @@ function useVideoFrame(src: string | undefined, item: Item): { url: string; w: n
     return () => { el.removeAttribute("src"); el.load(); v.current = null; };
   }, [url]);
   useEffect(() => {
+    // the video engine: the exact frame, no seeking
+    let live = true;
+    const want0 = Math.max(0, t - item.start);
+    const viaEngine = videoSource(src).then(async (s) => {
+      if (!s) return false;
+      const f = await s.frameAt(want0 % (s.dur || 1e9), 640);
+      if (!f || !live) return true;
+      const c = document.createElement("canvas"); c.width = f.w; c.height = f.h;
+      c.getContext("2d")!.drawImage(f.img, 0, 0);
+      try { setFrame({ url: c.toDataURL("image/jpeg", 0.8), w: f.w, h: f.h }); } catch { /* not ready */ }
+      return true;
+    });
     const el = v.current;
-    if (!el || !url) return;
+    if (!el || !url) return () => { live = false; };
     const want = Math.max(0, t - item.start) % (el.duration || 1e9);
     const grab = () => {
       const w = Math.min(640, el.videoWidth || 640), h = Math.round((w * (el.videoHeight || 360)) / (el.videoWidth || 640));
@@ -311,10 +336,14 @@ function useVideoFrame(src: string | undefined, item: Item): { url: string; w: n
       c.getContext("2d")!.drawImage(el, 0, 0, w, h);
       try { setFrame({ url: c.toDataURL("image/jpeg", 0.8), w, h }); } catch { /* not ready */ }
     };
-    if (Math.abs(el.currentTime - want) < 0.03 && el.readyState >= 2) { grab(); return; }
-    el.addEventListener("seeked", grab, { once: true });
-    if (el.readyState >= 1) el.currentTime = want; else el.addEventListener("loadedmetadata", () => { el.currentTime = want; }, { once: true });
-    return () => el.removeEventListener("seeked", grab);
+    const viaElement = () => {
+      if (!live) return;
+      if (Math.abs(el.currentTime - want) < 0.03 && el.readyState >= 2) { grab(); return; }
+      el.addEventListener("seeked", grab, { once: true });
+      if (el.readyState >= 1) el.currentTime = want; else el.addEventListener("loadedmetadata", () => { el.currentTime = want; }, { once: true });
+    };
+    viaEngine.then((ok) => { if (!ok) viaElement(); });
+    return () => { live = false; el.removeEventListener("seeked", grab); };
   }, [t, url, item.start]);
   return frame;
 }

@@ -23,6 +23,8 @@ import { useAppliedUiScale, useStacked } from "./layout";
 import { Fader } from "./Fader";
 import { askConfirm } from "./Confirm";
 import { PEAKS_PER_SEC, usePeaks } from "./waveform";
+import { thumbs, thumbTime, videoSource } from "./videoengine";
+import { mediaTime as mediaTimeE } from "@moshion/engine";
 
 const ZMAX = 6.5;
 /** Zoom fader runs 0..ZSTEPS for fine control over the log zoom range. */
@@ -749,6 +751,7 @@ export function Timeline() {
                           }}
                           onContextMenu={(e) => { e.preventDefault(); select(it.id); /* selecting shows the floating bar above it on the canvas */ }}
                         >
+                          {it.kind === "video" && it.src && <Filmstrip item={it} w={w} h={ROW_H - 2 * CLIP_PAD} />}
                           {(it.kind === "audio" || it.kind === "video") && it.src && <Wave item={it} w={w} />}
                           {/* grab strips on both ends: always trim the clip, above keyframes and IN/OUT blocks */}
                           <i className="cedge l" title="Drag to change where it starts" onPointerDown={(e) => clipDown(e, it)} />
@@ -1799,6 +1802,35 @@ export function fmtVal(prop: Prop, v: number) {
 export { ripple };
 
 /** The sound of a clip, drawn across it. */
+/**
+ * A video clip's frames along it (from the video engine): one small picture per clip-height of width, each the frame
+ * at that point of the clip (speed, trims and backwards included). Redrawn shortly after zooming or trimming stops.
+ */
+function Filmstrip({ item, w, h }: { item: Item; w: number; h: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const len = item.end - item.start;
+  useEffect(() => {
+    let live = true;
+    const run = setTimeout(async () => {
+      const src = await videoSource(item.src);
+      const c = ref.current;
+      if (!src || !c || !live || w < 4 || h < 4) return;
+      const dpr = Math.min(2, devicePixelRatio || 1), cw = Math.max(8, h * (src.w / src.h));
+      const vis = Math.min(w, 6000); // very long clips: only the first stretch (it's off screen past that anyway)
+      c.width = Math.round(vis * dpr); c.height = Math.round(h * dpr);
+      const g = c.getContext("2d")!;
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const n = Math.ceil(vis / cw);
+      const slots = Array.from({ length: n }, (_, i) => thumbTime(mediaTimeE(item, Math.min(len, ((i + 0.5) * cw * len) / w), src.dur)));
+      await thumbs(item.src!, slots, Math.round(h * dpr), (tt, f) => {
+        slots.forEach((s2, i) => { if (s2 === tt) g.drawImage(f.img, i * cw, 0, cw, h); });
+      }, () => live);
+    }, 180);
+    return () => { live = false; clearTimeout(run); };
+  }, [item.src, w, h, len, item.mediaOffset, item.speed, item.reverse]);
+  return <canvas ref={ref} className="film" style={{ width: Math.min(w, 6000), height: h }} aria-hidden="true" />;
+}
+
 function Wave({ item, w }: { item: Item; w: number }) {
   const pk = usePeaks(item.src);
   if (!pk || w < 8) return null;

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import type { Background, Project, SceneEffect } from "@moshion/engine";
 import { activeBackground, backgroundCSS, bgVideoTime } from "@moshion/engine";
 import { useMediaURL } from "./media";
+import { ExactFrame, useVideoSource } from "./videoview";
 import { useStore } from "./store";
 
 /** Deterministic pseudo-random in [0,1) from an integer seed, so every frame looks the same on replay and export. */
@@ -30,14 +31,24 @@ function BgVideo({ bg, t }: { bg: Background; t: number }) {
   const url = useMediaURL(bg.src);
   const ref = useRef<HTMLVideoElement>(null);
   const playing = useStore((s) => s.playing);
+  // paused or scrubbing: the video engine's exact frame (the element only catches up once the playhead rests)
+  const src = useVideoSource(bg.src);
   useEffect(() => {
     const el = ref.current;
     if (!el || !url) return;
     const want = bgVideoTime(bg, t, el.duration || bg.mediaDur);
-    if (playing) { if (el.paused) el.play().catch(() => {}); if (Math.abs(el.currentTime - want) > 0.3) el.currentTime = want; }
-    else { if (!el.paused) el.pause(); if (Math.abs(el.currentTime - want) > 0.02) el.currentTime = want; }
-  }, [t, playing, url, bg.start, bg.once]);
-  return url ? <video ref={ref} className="bgvideo" src={url} muted playsInline loop={!bg.once} preload="auto" /> : null;
+    if (playing) { if (el.paused) el.play().catch(() => {}); if (Math.abs(el.currentTime - want) > 0.3) el.currentTime = want; return; }
+    if (!el.paused) el.pause();
+    if (Math.abs(el.currentTime - want) <= 0.02) return;
+    if (!src) { el.currentTime = want; return; }
+    const id = setTimeout(() => { el.currentTime = want; }, 250);
+    return () => clearTimeout(id);
+  }, [t, playing, url, bg.start, bg.once, src]);
+  if (!url) return null;
+  return <>
+    <video ref={ref} className="bgvideo" src={url} muted playsInline loop={!bg.once} preload="auto" />
+    {src && <ExactFrame src={src} className="bgvideo" time={bgVideoTime(bg, t, src.dur || bg.mediaDur)} active={!playing} />}
+  </>;
 }
 
 /** Filter + jitter applied to everything on the canvas by the active looks. */

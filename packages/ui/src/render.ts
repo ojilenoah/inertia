@@ -7,6 +7,7 @@ import { reshapeOutline } from "./extras";
 import { activeBackground, backgroundCSS, bgVideoTime, itemState, pieceFx, splitPieces, textAnimOf, textUnit } from "@moshion/engine";
 import { activeLooks, looksTransform } from "./Looks";
 import { mediaBlob } from "./media";
+import { Reader, videoSource, type VideoSource } from "./videoengine";
 import { drawParticles } from "./newitems";
 import { itemFxFilter, itemHidden, letterColors, resolveFx, resolveItem, resolveScene } from "@moshion/engine";
 import { itemShapeD } from "./shapeMorph";
@@ -161,7 +162,12 @@ function loadImage(src: string): Promise<HTMLImageElement | null> {
 }
 
 export interface RenderSession {
+  /** Videos the engine can't decode here: <video> elements, seeked for each frame. */
   videos: Map<string, HTMLVideoElement>;
+  /** Videos the engine decodes (exact frames, each decoded once). */
+  engine: Map<string, VideoSource>;
+  /** One reader per place a video is used (a clip, a background, a text fill), so each reads forwards on its own. */
+  readers: Map<string, Reader>;
   noise: HTMLCanvasElement[];
   world: HTMLCanvasElement;
   scratch: HTMLCanvasElement;
@@ -186,9 +192,12 @@ export async function prepare(project: Project, width: number, height: number): 
   await document.fonts?.ready;
   for (const it of project.items) { const u = urlOf(it.fill); if (u) await loadImage(u); if (it.textFill?.url) await loadImage(it.textFill.url); }
   const videos = new Map<string, HTMLVideoElement>();
+  const engine = new Map<string, VideoSource>();
   const vsrcs = [...project.items.filter((it) => it.kind === "video").map((it) => it.src), ...project.items.map((it) => it.textFill?.kind === "video" ? it.textFill.src : undefined), ...(project.backgrounds ?? []).filter((b) => b.kind === "video").map((b) => b.src)];
   for (const src of vsrcs) {
-    if (!src || videos.has(src)) continue;
+    if (!src || videos.has(src) || engine.has(src)) continue;
+    const es = await videoSource(src);
+    if (es) { engine.set(src, es); continue; }
     const b = await mediaBlob(src);
     if (!b) continue;
     const v = document.createElement("video");
@@ -209,7 +218,31 @@ export async function prepare(project: Project, width: number, height: number): 
   const grain = await new Promise<HTMLImageElement | null>((res) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = GRAIN; });
   const stage = document.querySelector(".stage");
   const kEditor = stage ? stage.getBoundingClientRect().width / project.width : 0.3;
-  return { videos, noise, world: mk(), scratch: mk(), flat: document.createElement("canvas"), crop: document.createElement("canvas"), fxTmp: document.createElement("canvas"), sans, grain, screenPx: 1 / Math.max(0.05, kEditor) };
+  return { videos, engine, readers: new Map(), noise, world: mk(), scratch: mk(), flat: document.createElement("canvas"), crop: document.createElement("canvas"), fxTmp: document.createElement("canvas"), sans, grain, screenPx: 1 / Math.max(0.05, kEditor) };
+}
+
+/**
+ * A video's frame at `mt` seconds into the file (or, with `wrap`, its time looped over the file's length), from the
+ * engine (exact, decoded in order) or else by seeking a <video> element. `use` names where it's used.
+ */
+async function videoAt(rs: RenderSession, src: string, use: string, mt: (dur: number) => number): Promise<{ img: CanvasImageSource; w: number; h: number } | null> {
+  const es = rs.engine.get(src);
+  if (es) {
+    const key = `${src}|${use}`;
+    let r = rs.readers.get(key);
+    if (!r) { r = new Reader(es, 1 << 14); rs.readers.set(key, r); }
+    const f = await r.at(mt(es.dur));
+    return f ? { img: f.img, w: f.w, h: f.h } : null;
+  }
+  const v = rs.videos.get(src);
+  if (!v) return null;
+  await seek(v, mt(v.duration || 0));
+  return { img: v, w: v.videoWidth, h: v.videoHeight };
+}
+/** Let go of the decoders a render used. */
+export async function closeSession(rs: RenderSession) {
+  for (const r of rs.readers.values()) await r.close();
+  rs.readers.clear();
 }
 
 async function seek(v: HTMLVideoElement, t: number) {
@@ -234,10 +267,9 @@ async function textMedia(it: Item, local: number, rs: RenderSession): Promise<{ 
   const f = it.textFill;
   if (!f) return undefined;
   if (f.kind === "image" && f.url) { const u = urlOf(`url("${f.url}")`) ?? f.url; const img = images.get(u) ?? images.get(f.url); return img ? { src: img, w: img.naturalWidth, h: img.naturalHeight } : undefined; }
-  const v = f.src ? rs.videos.get(f.src) : undefined;
-  if (!v) return undefined;
-  await seek(v, local % (v.duration || 1e9));
-  return { src: v, w: v.videoWidth, h: v.videoHeight };
+  if (!f.src) return undefined;
+  const fr = await videoAt(rs, f.src, `text:${it.id}`, (dur) => local % (dur || 1e9));
+  return fr ? { src: fr.img, w: fr.w, h: fr.h } : undefined;
 }
 const STAR = [[50, 0], [61, 35], [98, 35], [68, 57], [79, 91], [50, 70], [21, 91], [32, 57], [2, 35], [39, 35]];
 const BLEND: Record<string, GlobalCompositeOperation> = { normal: "source-over", "plus-lighter": "lighter" };
@@ -575,11 +607,10 @@ async function paintFlat(ctx: Ctx, it: Item, s: ItemState, t: number, rs: Render
   }
   ctx.save();
   clipShape(ctx, it);
-  if (it.kind === "video" && it.src && rs.videos.get(it.src)) {
-    const v = rs.videos.get(it.src)!;
-    await seek(v, mediaTime(it, t - it.start, v.duration));
+  const vf = it.kind === "video" && it.src ? await videoAt(rs, it.src, it.id, (dur) => mediaTime(it, t - it.start, dur || undefined)) : null;
+  if (it.kind === "video" && vf) {
     ctx.fillStyle = "#000"; ctx.fillRect(-it.w / 2, -it.h / 2, it.w, it.h);
-    drawImageFit(ctx, v, v.videoWidth || it.w, v.videoHeight || it.h, it);
+    drawImageFit(ctx, vf.img, vf.w || it.w, vf.h || it.h, it);
   } else {
     const u = urlOf(it.fill);
     if (u) {
@@ -969,11 +1000,10 @@ async function renderPlain(out: HTMLCanvasElement, projectIn: Project, t: number
     paintCSS(w, css.background, -m0, -m0, W + m0 * 2, H + m0 * 2);
     w.restore();
   }
-  if (bg?.kind === "video" && bg.src && rs.videos.get(bg.src)) {
-    const v = rs.videos.get(bg.src)!;
-    await seek(v, bgVideoTime(bg, t, v.duration || bg.mediaDur));
-    const vw = v.videoWidth || W, vh = v.videoHeight || H, s = Math.max(W / vw, H / vh); // cover the canvas
-    w.drawImage(v, (W - vw * s) / 2, (H - vh * s) / 2, vw * s, vh * s);
+  const bf = bg?.kind === "video" && bg.src ? await videoAt(rs, bg.src, `bg:${bg.id}`, (dur) => bgVideoTime(bg, t, dur || bg.mediaDur)) : null;
+  if (bf) {
+    const vw = bf.w || W, vh = bf.h || H, s = Math.max(W / vw, H / vh); // cover the canvas
+    w.drawImage(bf.img, (W - vw * s) / 2, (H - vh * s) / 2, vw * s, vh * s);
   }
   // items, lower tracks first
   const items = project.items.filter((i) => i.kind !== "audio" && i.kind !== "motion" && i.kind !== "camera" && !itemHidden(project, i)).sort(stackCompare(project, t));
