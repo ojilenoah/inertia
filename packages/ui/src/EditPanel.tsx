@@ -100,7 +100,7 @@ const SECTIONS: { id: PanelSection; label: string; icon: string; when?: (it: Ite
   { id: "shape", label: "Shape", icon: "shapes", when: (it) => ["shape", "rect", "ellipse", "star"].includes(it.kind) },
   { id: "line", label: "Line", icon: "line", when: (it) => it.kind === "line" },
   { id: "fill", label: "Fill & border", icon: "frame", when: (it) => !["text", "line", "chart", "particles"].includes(it.kind) },
-  { id: "transform", label: "Position, size & 3D", icon: "move" },
+  { id: "transform", label: "Position, size & 3D", icon: "cube" },
   { id: "effects", label: "Effects, opacity & blend", icon: "sparkle" },
   { id: "layer", label: "Layer", icon: "layers" },
   { id: "mask", label: "Mask: cut it with another item or group, or use it to cut others (text: run it along a path)", icon: "mask", when: (it) => !["audio", "motion", "camera"].includes(it.kind) },
@@ -1313,7 +1313,7 @@ export function EditPanel() {
             {posTab === "pos" && <>
             {item?.kind !== "motion" && <Row label="Position" kf={kf(["x", "y", "z"])}>{nums([["x", "X"], ["y", "Y"], ["z", "Z"]], 1)}</Row>}
             <Row label="Scale" kf={kf(["scale"])}>{nums([["scale", "%"]], 0.005, pct, (n) => n / 100)}</Row>
-            {item?.kind !== "motion" && <Row label="Size"><div className="f2">
+            {item?.kind !== "motion" && <Row label="Size"><div className="f2 wh">
               <Num label="W" value={item.w} onChange={(v) => setF((it) => { const w = Math.max(1, Math.round(v)); if (it.lockRatio) it.h = Math.max(1, Math.round((it.h * w) / it.w)); it.w = w; }, false)} />
               <Num label="H" value={item.h} onChange={(v) => setF((it) => { const h = Math.max(1, Math.round(v)); if (it.lockRatio) it.w = Math.max(1, Math.round((it.w * h) / it.h)); it.h = h; }, false)} />
               <button className={"chip" + (item.lockRatio ? " on" : "")} title={item.lockRatio ? "Width and height stay in proportion" : "Keep width and height in proportion"} onClick={() => setF((it) => { it.lockRatio = !it.lockRatio; })}>{item.lockRatio ? "🔒" : "🔓"}</button>
