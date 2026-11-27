@@ -29,7 +29,7 @@ export function layer(itemId: string, dir: LayerMove) {
 }
 
 /** Kinds of item that can mask another (anything with an outline). */
-const MASKABLE = ["shape", "rect", "ellipse", "star", "image", "video", "glass", "text", "chart", "particles"];
+const MASKABLE = ["shape", "rect", "ellipse", "star", "image", "video", "text", "chart", "particles"];
 
 /** Right-click menu on the video canvas: stacking order and quick item actions. */
 export function CanvasMenu() {

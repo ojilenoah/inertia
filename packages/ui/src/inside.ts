@@ -9,7 +9,7 @@ import { importFiles } from "./media";
  * stays visible. Items keep their own layer (group them yourself if they should move together); only
  * brand-new ones are placed, centred, on a track just above the shape.
  */
-export const CONTAINER_KINDS = ["shape", "rect", "ellipse", "star", "image", "video", "glass"];
+export const CONTAINER_KINDS = ["shape", "rect", "ellipse", "star", "image", "video"];
 
 /** Mask `childId` with `containerId`'s shape, keeping the shape visible. Nothing moves to another layer: that's up to you. */
 function putInside(p: Project, containerId: string, childId: string) {

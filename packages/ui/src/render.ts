@@ -292,7 +292,7 @@ function outline(it: Item): { p: Path2D; rule: CanvasFillRule } {
     p.addPath(new Path2D(sd.d), new DOMMatrix().translate(-w / 2, -h / 2));
     return { p, rule: sd.evenodd ? "evenodd" : "nonzero" };
   }
-  if (it.kind === "ellipse" || it.kind === "glass") p.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
+  if (it.kind === "ellipse") p.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
   else if (it.kind === "star") { STAR.forEach(([px, py], i) => (i ? p.lineTo : p.moveTo).call(p, -w / 2 + (px / 100) * w, -h / 2 + (py / 100) * h)); p.closePath(); }
   else p.roundRect(-w / 2, -h / 2, w, h, Math.min(it.radius ?? 0, w / 2, h / 2));
   return { p, rule: "nonzero" };
@@ -303,7 +303,7 @@ function perimeter(it: Item): number {
   const w = it.w, h = it.h;
   let d: string;
   if (it.kind === "shape") d = shapeD(it.shape ?? { type: "rect" }, w, h).d;
-  else if (it.kind === "ellipse" || it.kind === "glass") return Math.PI * (3 * (w + h) / 2 - Math.sqrt((3 * w / 2 + h / 2) * (w / 2 + 3 * h / 2)));
+  else if (it.kind === "ellipse") return Math.PI * (3 * (w + h) / 2 - Math.sqrt((3 * w / 2 + h / 2) * (w / 2 + 3 * h / 2)));
   else d = `M0 0H${w}V${h}H0Z`;
   probe.setAttribute("d", d);
   try { return probe.getTotalLength(); } catch { return 2 * (w + h); }
@@ -758,41 +758,12 @@ function drawPinned(ctx: Ctx, f: CanvasRenderingContext2D, pw: number, ph: numbe
   ctx.restore();
 }
 
-/** Liquid glass, as in the editor: what's behind it, blurred, more saturated and brighter, with a rim and a soft shadow. */
-function drawGlass(ctx: Ctx, it: Item, s: ItemState, rs: RenderSession) {
-  const m = ctx.getTransform(), k = m.a;
-  const place = (c: Ctx) => { c.translate(s.x, s.y); c.rotate((s.rz * Math.PI) / 180); c.scale(s.scale, s.scale); };
-  ctx.save();
-  ctx.globalAlpha = Math.max(0, Math.min(1, s.opacity));
-  // soft shadow under it
-  ctx.save(); place(ctx);
-  ctx.shadowColor = "rgba(0,0,0,.28)"; ctx.shadowBlur = 70 * k; ctx.shadowOffsetY = 30 * k * s.scale;
-  ctx.fillStyle = "rgba(0,0,0,.001)"; ctx.beginPath(); ctx.ellipse(0, 0, it.w / 2 - 10, it.h / 2 - 10, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
-  // the backdrop through the glass
-  const sc = rs.scratch, g = sc.getContext("2d")!;
-  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, sc.width, sc.height);
-  g.filter = `blur(${(it.effect?.blur ?? 1.5) * k}px) saturate(1.45) brightness(1.08)`;
-  g.drawImage(ctx.canvas, 0, 0); g.filter = "none";
-  ctx.save(); place(ctx); ctx.beginPath(); ctx.ellipse(0, 0, it.w / 2, it.h / 2, 0, 0, Math.PI * 2); ctx.clip();
-  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(sc, 0, 0);
-  ctx.setTransform(m); place(ctx);
-  // highlights and rim (same gradients as the editor's CSS)
-  paintCSS(ctx, "radial-gradient(circle at 30% 22%, rgba(255,255,255,.55), transparent 30%)", -it.w / 2, -it.h / 2, it.w, it.h);
-  paintCSS(ctx, "radial-gradient(circle at 50% 50%, transparent 62%, rgba(255,255,255,.4) 74%, rgba(130,150,255,.2) 84%, rgba(255,255,255,.6) 97%)", -it.w / 2, -it.h / 2, it.w, it.h);
-  ctx.lineWidth = 4; ctx.strokeStyle = "rgba(255,255,255,.7)";
-  ctx.beginPath(); ctx.ellipse(0, 0, it.w / 2, it.h / 2, 0, 0, Math.PI * 2); ctx.stroke();
-  ctx.restore();
-  ctx.restore();
-}
-
 async function drawItem(ctx: Ctx, raw: Item, s: ItemState, t: number, rs: RenderSession, placed?: ItemPlace | null) {
   // look and text as they are at this moment (they can have keyframes)
   const tx = textShown(raw, t - raw.start);
   const lc = letterColors(raw, t - raw.start);
   const it: Item & { __reshape?: [number, number][] | null; __mt?: typeof tx; __morph?: MorphChar[]; __shape?: { d: string; evenodd?: boolean }; __letters?: Map<number, string> | null; __hollow?: ReturnType<typeof hollowParts> } =
     { ...resolveItem(raw, t - raw.start), __morph: tx.morph, __mt: tx, __shape: raw.kind === "shape" ? itemShapeD(raw, t - raw.start, raw.w, raw.h) ?? undefined : undefined, __letters: lc, __hollow: reshapeOutline(raw, t) ? null : hollowParts(raw, t - raw.start), __reshape: reshapeOutline(raw, t) };
-  if (it.kind === "glass") { drawGlass(ctx, it, s, rs); return; }
   const k = ctx.getTransform().a; // world px → output px
   // corner pin: warped in perspective onto its four corners (in its own frame, before it turns)
   const pinH = it.kind === "line" || it.kind === "motion" || it.__reshape ? null : pinHAt(raw, t - raw.start);

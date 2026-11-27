@@ -147,14 +147,11 @@ function itemSegs(project: Project, it: Item): Seg[] {
     scrub("ls", "Space", 0.002, field(id, (x) => x.letterSpacing ?? -0.04, (x, v) => { x.letterSpacing = Math.min(Math.max(v, -0.2), 0.5); }), (v) => v.toFixed(2)),
     ...["#111111", "#FFFFFF", "#E0571A"].map((c): Sub => ({ kind: "swatch", id: "tc" + c, label: c, color: c, on: (it.color ?? "").toLowerCase() === c.toLowerCase(), run: () => edit((d) => { d.items.find((x) => x.id === id)!.color = c; }) })),
   ] });
-  if (it.kind !== "glass" && it.kind !== "text") segs.push({ id: "fill", label: "Fill · frame", icon: "frame", subs: [
+  if (it.kind !== "text") segs.push({ id: "fill", label: "Fill · frame", icon: "frame", subs: [
     ...SWATCHES.slice(0, 5).map((c): Sub => ({ kind: "swatch", id: "f" + c, label: c, color: c, on: it.fill.toLowerCase() === c.toLowerCase(), run: () => edit((d) => { d.items.find((x) => x.id === id)!.fill = c; }) })),
     { kind: "action", id: "img", label: "Image", close: true, run: () => pickImage((url, name) => { edit((d) => { d.items.find((x) => x.id === id)!.fill = `url("${url}")`; }); toast(`${name} placed inside ${it.name}`); }) },
   ] });
-  segs.push({ id: "effects", label: "Effects", icon: "sparkle", subs: it.kind === "glass" ? [
-    scrub("gblur", "Blur", 0.05, field(id, (x) => x.effect?.blur ?? 1.5, (x, v) => { x.effect = { kind: "liquid-glass", magnify: x.effect?.magnify ?? 1.35, blur: Math.min(Math.max(v, 0), 20) }; }), (v) => v.toFixed(1)),
-    look("shadow", "Shadow", 0.2, 80),
-  ] : [
+  segs.push({ id: "effects", label: "Effects", icon: "sparkle", subs: [
     look("extrude", "Depth", 0.2, 60), look("shadow", "Shadow", 0.2, 80), look("blur", "Blur", 0.05, 40), look("glow", "Glow", 0.2, 80),
   ] });
   segs.push({ id: "keys", label: "Keyframes", icon: "diamond", subs: [

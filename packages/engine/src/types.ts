@@ -24,7 +24,7 @@ export interface Keyframe {
 
 export type Keys = Partial<Record<Prop, Keyframe[]>>;
 
-export type ItemKind = "rect" | "ellipse" | "star" | "text" | "image" | "glass" | "audio" | "video" | "motion" | "shape" | "line" | "camera" | "chart" | "particles";
+export type ItemKind = "rect" | "ellipse" | "star" | "text" | "image" | "audio" | "video" | "motion" | "shape" | "line" | "camera" | "chart" | "particles";
 /** Something imported into the project's Media: pictures inline, video/audio by id (stored locally). */
 /** Every CSS blend mode, grouped the way design apps show them. */
 export const BLEND_GROUPS: [string, [BlendMode, string][]][] = [
@@ -209,8 +209,6 @@ export interface Item {
   /** Corner pin on a shape: "shape" reshapes its outline (and border) to the corners instead of a perspective warp. */
   pinMode?: "persp" | "shape";
   pin0x?: number; pin0y?: number; pin1x?: number; pin1y?: number; pin2x?: number; pin2y?: number; pin3x?: number; pin3y?: number;
-  /** Glass/effect shapes. */
-  effect?: { kind: "liquid-glass" | "frost"; magnify: number; blur: number };
   /** Preset animations layered on top of keyframes: entering, leaving, and for the whole life of the item. */
   anim?: ItemAnim;
 }

@@ -50,7 +50,7 @@ export function hollowParts(item: Item, local: number): { outer: { d: string; ev
   const w = item.w, h = item.h, w2 = w - 2 * t, h2 = h - 2 * t;
   const of = (W: number, H: number): { d: string; evenodd?: boolean } | null => {
     if (item.kind === "shape") return itemShapeD(item, local, W, H);
-    if (item.kind === "ellipse" || item.kind === "glass") return shapeD({ type: "ellipse" }, W, H);
+    if (item.kind === "ellipse") return shapeD({ type: "ellipse" }, W, H);
     if (item.kind === "star") return { d: STAR_PTS.map(([x, y], i) => `${i ? "L" : "M"}${(x * W) / 100} ${(y * H) / 100}`).join("") + "Z" };
     if (["rect", "image", "video"].includes(item.kind)) return shapeD({ type: "rect", round: Math.min(1, (item.radius ?? 0) / (Math.min(w, h) / 2 || 1)) }, W, H);
     return null;

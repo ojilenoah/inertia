@@ -51,7 +51,7 @@ function Thumb({ p, max = 120 }: { p: Project; max?: number }) {
         <i key={i.id} style={{
           left: (i.base.x - i.w / 2) * k, top: (i.base.y - i.h / 2) * k, width: i.w * k, height: i.h * k,
           background: i.kind === "text" ? "transparent" : i.fill.startsWith("url(") ? `${i.fill} center/cover` : i.fill === "transparent" ? "rgba(255,255,255,.4)" : i.fill,
-          borderRadius: i.kind === "ellipse" || i.kind === "glass" ? "50%" : (i.radius ?? 0) * k,
+          borderRadius: i.kind === "ellipse" ? "50%" : (i.radius ?? 0) * k,
           color: i.color, fontSize: Math.max(4, (i.fontSize ?? 0) * k), fontWeight: 800,
         }}>{i.kind === "text" ? i.text : null}</i>
       ))}

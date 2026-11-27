@@ -85,9 +85,6 @@ button.chip:hover { color: var(--ink); }
 .obj .face { position: absolute; inset: 0; backface-visibility: hidden; border-radius: inherit; overflow: hidden; }
 .obj .back { transform: rotateY(180deg); background: #fff; }
 .obj .txt { position: absolute; inset: 0; display: flex; align-items: center; white-space: pre; font-weight: 800; letter-spacing: -.06em; line-height: .82; }
-.obj.glass { border-radius: 50%; backdrop-filter: blur(var(--gb, 1.5px)) saturate(1.45) brightness(1.08);
-  background: radial-gradient(circle at 30% 22%, rgba(255,255,255,.55), transparent 30%), radial-gradient(circle at 50% 50%, transparent 62%, rgba(255,255,255,.4) 74%, rgba(130,150,255,.2) 84%, rgba(255,255,255,.6) 97%);
-  box-shadow: inset 0 0 0 2px rgba(255,255,255,.7), 0 30px 70px -20px rgba(0,0,0,.28); }
 .selbox { position: absolute; pointer-events: none; outline: 3px solid var(--sel); outline-offset: 6px; z-index: 50; }
 .selbox i { position: absolute; width: 22px; height: 22px; background: #fff; border: 3px solid var(--sel); pointer-events: auto; }
 .selbox i.nw { left: -18px; top: -18px; cursor: nwse-resize; } .selbox i.ne { right: -18px; top: -18px; cursor: nesw-resize; }
@@ -1574,3 +1571,12 @@ body.maskpicking .stagewrap, body.maskpicking .lanes, body.maskpicking .clip { c
 /* phones: every button in the bar over the tracks is a square */
 .mo.phone .tlbar button { width: 28px; height: 28px; min-width: 28px; padding: 0; display: grid; place-items: center; flex: none; }
 .mo.phone .tlbar .play.play { width: 28px; height: 28px; margin: 0; }
+/* a thin line where one canvas ends and the next begins (phones: they're square-ended, touching) */
+.mo.phone .cvdock .lrow.canvas .clip.cvseg::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 1.5px; background: var(--bg); z-index: 5; pointer-events: none; }
+/* phones: snapping and the graph in the tracks bar: no box when on, just a bright icon (dim when off); a bit bigger */
+.mo.phone .tlbar .tlside.right .ib { background: none; color: color-mix(in srgb, var(--ink) 40%, transparent); }
+.mo.phone .tlbar .tlside.right .ib.on { background: none; color: var(--ink); }
+.mo.phone .tlbar .tlside.right .ib.on svg.i { stroke-width: 2.1; }
+.mo.phone .tlbar .tlside.right .ib svg.i { width: 19px; height: 19px; }
+/* the transition marker between two canvases: a square */
+.lrow.canvas .trbadge, .lrow.canvas .trbadge.on { width: 18px; height: 18px; max-height: none; }

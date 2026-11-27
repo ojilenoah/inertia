@@ -11,12 +11,6 @@ export const LAKE = "linear-gradient(160deg,#9FD3FF 0%,#4B7BEA 50%,#1B2550 100%)
 export function sampleProject(): Project {
   const items: Item[] = [
     {
-      id: "glass", name: "Liquid glass", kind: "glass", trackId: "V3", start: 1.4, end: 9.6,
-      w: 330, h: 330, fill: "transparent", tint: "--blue", base: base({ x: 560, y: 1080 }),
-      effect: { kind: "liquid-glass", magnify: 1.35, blur: 1.5 },
-      keys: { x: [{ t: 0, v: 300, ease: "ease" }, { t: 2.2, v: 560, ease: "ease" }, { t: 6, v: 760, ease: "ease" }] },
-    },
-    {
       id: "circle", name: "Circle", kind: "ellipse", trackId: "H2", start: 0.4, end: 6.5,
       w: 520, h: 520, fill: DUSK, tint: "--violet", base: base({ x: 740, y: 840 }),
       keys: { scale: [{ t: 0, v: 0, ease: "back" }, { t: 0.7, v: 1, ease: "ease" }, { t: 2.4, v: 1.08, ease: "ease" }] },
@@ -48,7 +42,6 @@ export function sampleProject(): Project {
     id: "demo", name: "Launch Reel — Hero", width: 1080, height: 1920, fps: 60, duration: 12,
     background: "radial-gradient(120% 70% at 80% 10%,#F6E7D0 0%,transparent 60%),radial-gradient(90% 60% at 0% 100%,#D8DCF5 0%,transparent 60%),#EDEAE3",
     tracks: [
-      { id: "V3", name: "Glass", kind: "video" },
       { id: "G1", name: "Hero", kind: "group", open: true, keys: { y: [{ t: 9, v: 0, ease: "expo" }, { t: 10.2, v: -1400, ease: "ease" }] } },
       { id: "H1", name: "Track 1", kind: "video", parent: "G1" },
       { id: "H2", name: "Track 2", kind: "video", parent: "G1" },

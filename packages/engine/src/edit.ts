@@ -377,6 +377,8 @@ export function dropEmptyTracks(project: Project): boolean {
 }
 
 export function normalizeProject(project: Project) {
+  // liquid glass items were taken out of the app: older projects lose theirs
+  project.items = project.items.filter((it) => (it.kind as string) !== "glass");
   for (const it of project.items) migrateTextAnim(it);
   dropEmptyTracks(project);
   unifyTracks(project);
@@ -530,7 +532,7 @@ export type TrackSort = "layer" | "type" | "start" | "created" | "name";
 export const TRACK_SORTS: { id: TrackSort; label: string }[] = [
   { id: "layer", label: "Layer" }, { id: "type", label: "Type" }, { id: "start", label: "Start" }, { id: "created", label: "Created" }, { id: "name", label: "Name" },
 ];
-const KIND_ORDER: ItemKind[] = ["text", "rect", "ellipse", "star", "shape", "line", "glass", "image", "video", "motion", "audio"];
+const KIND_ORDER: ItemKind[] = ["text", "rect", "ellipse", "star", "shape", "line", "image", "video", "motion", "audio"];
 /** The tracks in the order a sort shows them (groups keep their tracks under them). */
 export function sortTracks(project: Project, mode: TrackSort): Track[] {
   if (mode === "layer") return project.tracks;

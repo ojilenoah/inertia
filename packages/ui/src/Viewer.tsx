@@ -120,7 +120,7 @@ function screenPoint(s: ItemState, u: number, v: number): [number, number] {
 }
 
 /** Items that can be corner-pinned (lines and paths have their own points; sound and the camera aren't drawn). */
-export const PINNABLE = (it: Item) => !["line", "motion", "audio", "camera", "glass"].includes(it.kind);
+export const PINNABLE = (it: Item) => !["line", "motion", "audio", "camera"].includes(it.kind);
 
 /** Not turned in 3D: drawn as a plain 2D layer, which the browser redraws sharp at any size. */
 const isFlat = (s: ItemState) => Math.abs(s.rx % 360) < 0.01 && Math.abs(s.ry % 360) < 0.01 && Math.abs(s.z) < 0.01;
@@ -352,7 +352,7 @@ function useVideoFrame(src: string | undefined, item: Item): { url: string; w: n
 /** The outline of a plain rectangle, circle or star, as a path (for borders that draw on). */
 function borderD(it: Item): string {
   const w = it.w, h = it.h;
-  if (it.kind === "ellipse" || it.kind === "glass") return `M${w / 2} 0A${w / 2} ${h / 2} 0 1 1 ${w / 2 - 0.01} 0Z`;
+  if (it.kind === "ellipse") return `M${w / 2} 0A${w / 2} ${h / 2} 0 1 1 ${w / 2 - 0.01} 0Z`;
   if (it.kind === "star") return STAR.replace(/^polygon\(|\)$/g, "").split(",").map((pp, i) => { const [x, y] = pp.trim().split(" ").map(parseFloat); return `${i ? "L" : "M"}${(x / 100) * w} ${(y / 100) * h}`; }).join("") + "Z";
   const r = Math.min(it.radius ?? 0, w / 2, h / 2);
   return `M${r} 0H${w - r}A${r} ${r} 0 0 1 ${w} ${r}V${h - r}A${r} ${r} 0 0 1 ${w - r} ${h}H${r}A${r} ${r} 0 0 1 0 ${h - r}V${r}A${r} ${r} 0 0 1 ${r} 0Z`;
@@ -371,14 +371,11 @@ function ItemView({ item: raw, s, editing, cropping, local = 0, extra }: { item:
   const style: React.CSSProperties = {
     left: s.x - item.w / 2, top: s.y - item.h / 2, width: item.w, height: item.h,
     // flat items get a 2D transform (and no 3D layer), so their edges stay crisp however big they get
-    transform: (isFlat(s) ? `rotate(${s.rz}deg) scale(${s.scale})` : xf(s)) + (pinH ? ` ${pinCSS(pinH)}` : ""), opacity: s.opacity, borderRadius: item.kind === "ellipse" || item.kind === "glass" ? "50%" : item.radius ?? 0,
+    transform: (isFlat(s) ? `rotate(${s.rz}deg) scale(${s.scale})` : xf(s)) + (pinH ? ` ${pinCSS(pinH)}` : ""), opacity: s.opacity, borderRadius: item.kind === "ellipse" ? "50%" : item.radius ?? 0,
     ...(isFlat(s) ? { transformStyle: "flat", ["--bf" as string]: "visible", ["--backd" as string]: "none" } : {}),
     filter: [item.fx?.some((f) => !f.off && (f.amount > 0 || f.keys?.some((k) => k.v > 0))) ? `url(#fxi-${item.id})` : "", lookFilter(item), s.blur ? `blur(${s.blur}px)` : ""].filter(Boolean).join(" ") || undefined, mixBlendMode: item.blend && item.blend !== "normal" ? item.blend : undefined,
     ...extra,
   };
-  if (item.kind === "glass") {
-    return <div className="obj glass" data-id={item.id} style={{ ...style, ["--gb" as string]: `${item.effect?.blur ?? 1.5}px` }} />;
-  }
   if (item.kind === "text") {
     const align = item.align ?? "left";
     const grad = item.textGradient;
@@ -1431,7 +1428,7 @@ export function Viewer() {
               const it = project.items.find((i) => i.id === id);
               const ms = it && itemState(project, it, t);
               if (!it || !ms?.visible) return null;
-              return <div key={id} className="selbox multi" style={{ left: ms.x - it.w / 2, top: ms.y - it.h / 2, width: it.w, height: it.h, transform: xf(ms), borderRadius: it.kind === "ellipse" || it.kind === "glass" ? "50%" : it.radius ?? 0 }} />;
+              return <div key={id} className="selbox multi" style={{ left: ms.x - it.w / 2, top: ms.y - it.h / 2, width: it.w, height: it.h, transform: xf(ms), borderRadius: it.kind === "ellipse" ? "50%" : it.radius ?? 0 }} />;
             })}
             {/* the edit-mode switch: one button, each click goes to the next way of editing the item (2D → 3D → corner pin → 2D);
                 its icon shows where the next click goes. It sits by the item's top-right on screen, upright and always the same
@@ -1463,7 +1460,7 @@ export function Viewer() {
                 style={{
                   left: selState.x - sel.w / 2, top: selState.y - sel.h / 2, width: sel.w, height: sel.h,
                   transform: xf(selState),
-                  borderRadius: sel.kind === "ellipse" || sel.kind === "glass" ? "50%" : sel.kind === "text" ? (sel.textBg ? sel.radius ?? 0 : 0) : sel.radius ?? 0,
+                  borderRadius: sel.kind === "ellipse" ? "50%" : sel.kind === "text" ? (sel.textBg ? sel.radius ?? 0 : 0) : sel.radius ?? 0,
                   // the box is scaled with the item: undo that for its lines and handles
                   ["--k" as string]: k * Math.max(0.02, Math.abs(selState.scale)),
                 }}

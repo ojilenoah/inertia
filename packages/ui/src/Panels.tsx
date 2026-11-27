@@ -215,7 +215,6 @@ const SHAPES: Record<string, Partial<Item>> = {
   ellipse: { kind: "ellipse", name: "Ellipse", w: 380, h: 380, fill: "#7B4DFF", tint: "--violet" },
   star: { kind: "star", name: "Star", w: 300, h: 300, fill: "#111111", tint: "--pink" },
   text: { kind: "text", name: "Text", w: 700, h: 200, fill: "transparent", text: "Type here", fontSize: 120, color: "#111111", tint: "--violet" },
-  glass: { kind: "glass", name: "Liquid glass", w: 340, h: 340, fill: "transparent", tint: "--blue", effect: { kind: "liquid-glass", magnify: 1.35, blur: 1.5 } },
 };
 
 /** Black or white, whichever shows up on the background at time t. */
@@ -253,7 +252,7 @@ export function Rail() {
   const wide = useStore((s) => !isVertical(s.project));
   const stacked = useStacked();
   const touch = useTouch();
-  const tools: [string, string, string][] = [["text", "type", "Text"], ["glass", "drop", "Liquid glass (effect shape)"]];
+  const tools: [string, string, string][] = [["text", "type", "Text"]];
   const lineTool = useStore((s) => s.ui.lineTool);
   const blade = useStore((s) => s.ui.tool === "blade");
   return (
@@ -317,7 +316,7 @@ export function Layers() {
       onClick={() => select(it.id)}
       onContextMenu={(e) => { e.preventDefault(); select(it.id); setUI({ modal: null, wheel: { x: e.clientX, y: e.clientY, itemId: it.id } }); }}
     >
-      <span className="sw" style={{ background: it.kind === "text" ? it.color : it.kind === "glass" ? "radial-gradient(circle at 30% 25%,#fff,#C5CEFF 55%,#8592FF)" : it.fill, backgroundSize: "cover" }} />
+      <span className="sw" style={{ background: it.kind === "text" ? it.color : it.fill, backgroundSize: "cover" }} />
       <span className="nm">{it.name}</span>
       <span className="tag">{it.trackId}</span>
     </button>

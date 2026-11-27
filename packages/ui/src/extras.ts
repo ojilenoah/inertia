@@ -45,7 +45,7 @@ export function maskOf(project: Project, item: Item): Item["mask"] {
 }
 function specOf(it: Item): ShapeSpec | null {
   if (it.kind === "shape" && it.shape) return it.shape;
-  if (it.kind === "ellipse" || it.kind === "glass") return { type: "ellipse" };
+  if (it.kind === "ellipse") return { type: "ellipse" };
   if (it.kind === "star") return { type: "star", count: 5, inner: 0.38 };
   if (["rect", "image", "video", "text", "chart", "particles"].includes(it.kind)) return { type: "rect", round: Math.min(1, (it.radius ?? 0) / (Math.min(it.w, it.h) / 2 || 1)) };
   return null;

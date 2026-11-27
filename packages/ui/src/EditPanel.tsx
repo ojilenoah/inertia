@@ -99,7 +99,7 @@ const SECTIONS: { id: PanelSection; label: string; icon: string; when?: (it: Ite
   { id: "text", label: "Text", icon: "type", when: (it) => it.kind === "text" || !!it.text },
   { id: "shape", label: "Shape", icon: "shapes", when: (it) => ["shape", "rect", "ellipse", "star"].includes(it.kind) },
   { id: "line", label: "Line", icon: "line", when: (it) => it.kind === "line" },
-  { id: "fill", label: "Fill & border", icon: "frame", when: (it) => !["glass", "text", "line", "chart", "particles"].includes(it.kind) },
+  { id: "fill", label: "Fill & border", icon: "frame", when: (it) => !["text", "line", "chart", "particles"].includes(it.kind) },
   { id: "transform", label: "Position, size & 3D", icon: "move" },
   { id: "effects", label: "Effects, opacity & blend", icon: "sparkle" },
   { id: "layer", label: "Layer", icon: "side" },
@@ -396,7 +396,7 @@ function GroupMask({ groupId }: { groupId: string }) {
       <Row label="Mask with">
         <select className="psel" value={m?.by ?? ""} onChange={(e) => set((_, tr) => { if (e.target.value) tr.mask = { by: e.target.value, invert: tr.mask?.invert, inside: tr.mask ? tr.mask.inside : true, edge: tr.mask?.edge }; else delete tr.mask; })}>
           <option value="">Nothing (no mask)</option>
-          {project.items.filter((i) => !mine.has(i.id) && ["shape", "rect", "ellipse", "star", "image", "video", "glass", "text", "chart", "particles"].includes(i.kind)).map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+          {project.items.filter((i) => !mine.has(i.id) && ["shape", "rect", "ellipse", "star", "image", "video", "text", "chart", "particles"].includes(i.kind)).map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
           {project.tracks.filter((t) => t.kind === "group" && t.id !== groupId).map((t) => <option key={t.id} value={t.id}>{`Group: ${t.name}`}</option>)}
         </select>
       </Row>
@@ -465,8 +465,8 @@ function LookOptions({ item, L }: { item: Item; L: (k: keyof typeof NO_LOOK, lab
   const setO = (fn: (q: NonNullable<Item["lookOpts"]>) => void, commit = false) => edit((d) => { const it = d.items.find((q) => q.id === item.id); if (!it) return; const q = { ...(it.lookOpts ?? {}) }; fn(q); it.lookOpts = q; }, commit);
   return (
     <>
-      {item.kind !== "glass" && L("extrude", "3D depth", 60)}
-      {item.kind !== "glass" && lk.extrude > 0 && <div className="lookopts">
+      {L("extrude", "3D depth", 60)}
+      {lk.extrude > 0 && <div className="lookopts">
         <Row label="Colour"><Color allowNone value={o.depthColor} onChange={(c) => setO((q) => { q.depthColor = c ?? undefined; }, true)} /></Row>
         <Row label="Direction"><Slider value={o.depthAngle ?? 45} min={0} max={360} fmt={(v) => `${Math.round(v)}°`} onChange={(v) => setO((q) => { q.depthAngle = v; })} /></Row>
       </div>}
@@ -618,7 +618,7 @@ function MaskAndRepeat({ item, only }: { item: Item; only?: "mask" }) {
           it.mask = { by: e.target.value, invert: it.mask?.invert, inside: isText ? undefined : it.mask ? it.mask.inside : true };
         })}>
           <option value="">Nothing (no mask)</option>
-          {project.items.filter((i) => i.id !== item.id && ["shape", "rect", "ellipse", "star", "image", "video", "glass", "text", "chart", "particles"].includes(i.kind)).map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+          {project.items.filter((i) => i.id !== item.id && ["shape", "rect", "ellipse", "star", "image", "video", "text", "chart", "particles"].includes(i.kind)).map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
           {project.tracks.filter((g) => g.kind === "group" && !itemsInGroup(project, g.id).some((x) => x.id === item.id)).map((g) => <option key={g.id} value={g.id}>{`Group: ${g.name}`}</option>)}
         </select>
         <button className="chip" title="Pick it on the canvas or the tracks" onClick={() => startMaskPick(item.id, "with")}>Pick</button>
@@ -1289,8 +1289,8 @@ export function EditPanel() {
                 <button className="chip" onClick={() => setF((it) => { it.imgX = 0; it.imgY = 0; it.imgZoom = 1; })}>Reset</button>
               </div>
             </>}
-            {/* shapes have it in the Shape card; pictures, videos and glass keep it here */}
-            {["image", "video", "glass"].includes(item.kind) && <>
+            {/* shapes have it in the Shape card; pictures and videos keep it here */}
+            {["image", "video"].includes(item.kind) && <>
               <Row label="Hollow"><Slider value={numAt(item, "hollow", t - item.start)} min={0} max={Math.round(Math.min(item.w, item.h) / 2)} fmt={(v) => (v ? `${Math.round(v)}px rim` : "Solid")} onChange={(v) => setF((it) => { setNum(it, "hollow", st().t, Math.round(v)); }, false)} /></Row>
             </>}
             {(item.kind === "rect" || item.kind === "image") && <Row label="Corners"><Slider value={Math.min(item.radius ?? 0, Math.min(item.w, item.h) / 2)} min={0} max={Math.round(Math.min(item.w, item.h) / 2)} onChange={(v) => setF((it) => { it.radius = v; }, false)} /></Row>}
@@ -1360,7 +1360,6 @@ export function EditPanel() {
                 <button key={k} role="tab" className={fxTab === k ? "on" : ""} title={tip} onClick={() => setFxTab(k)}>{l}</button>)}
             </div>
             {fxTab === "fx" && <>
-            {item.kind === "glass" && <Row label="Glass blur"><Slider value={item.effect?.blur ?? 1.5} min={0} max={20} step={0.5} onChange={(v) => setF((it) => { it.effect = { kind: "liquid-glass", magnify: it.effect?.magnify ?? 1.35, blur: v }; }, false)} /></Row>}
             <LookOptions item={item} L={L} />
             {item.kind === "text" && <TextShadowOpts item={item} />}
             <ItemFxSection item={item} />
