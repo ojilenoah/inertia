@@ -600,8 +600,9 @@ export function Timeline() {
         {phone ? (<>
         <div className="tlside left">
           <div className="seg sm" role="group" aria-label="Timeline tool">
-            {tools.map(([id, ic, tip]) => (
-              <button key={id} className={ui.tool === id ? "on" : ""} title={tip} onClick={() => setUI({ tool: id })}><Icon name={ic} /></button>
+            {/* phones: no arrow here (the sidebar's arrow is the one select); tapping Blade or Ripple again turns it off */}
+            {tools.filter(([id]) => !(phone && id === "select")).map(([id, ic, tip]) => (
+              <button key={id} className={ui.tool === id ? "on" : ""} title={tip} onClick={() => setUI({ tool: phone && ui.tool === id ? "select" : id })}><Icon name={ic} /></button>
             ))}
           </div>
         </div>

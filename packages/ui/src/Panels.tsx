@@ -164,7 +164,8 @@ export function PlayerBar() {
 /** Select or hand: with the hand, the canvas only moves and zooms (drag to move around, scroll or pinch to zoom). */
 function SelectHand() {
   const hand = useStore((s) => !!s.ui.hand);
-  const set = (on: boolean) => useStore.getState().setUI({ hand: on, ...(on ? { pinning: null, ctx: null } : {}) });
+  // the arrow is the one select: it also puts the timeline back from Blade / Ripple (like V)
+  const set = (on: boolean) => useStore.getState().setUI({ hand: on, ...(on ? { pinning: null, ctx: null } : { tool: "select" }) });
   return <>
     <button className={"ib" + (hand ? "" : " on")} title="Select (V)" aria-label="Select" onClick={() => set(false)}><Icon name="cursor" /></button>
     <button className={"ib" + (hand ? " on" : "")} title="Hand (H): move and zoom the canvas" aria-label="Hand" onClick={() => set(!hand)}><Icon name="hand" /></button>
