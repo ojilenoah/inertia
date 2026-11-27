@@ -103,9 +103,9 @@ const SECTIONS: { id: PanelSection; label: string; icon: string; when?: (it: Ite
   { id: "transform", label: "Position, size & 3D", icon: "cube" },
   { id: "effects", label: "Effects, opacity & blend", icon: "sparkle" },
   { id: "layer", label: "Layer", icon: "layers" },
-  { id: "mask", label: "Mask: cut it with another item or group, or use it to cut others (text: run it along a path)", icon: "mask", when: (it) => !["audio", "motion", "camera"].includes(it.kind) },
+  { id: "mask", label: "Mask & path", icon: "mask", when: (it) => !["audio", "motion", "camera"].includes(it.kind) },
   { id: "group", label: "Group", icon: "group", when: (_it, g) => g },
-  { id: "motion", label: "Motion path", icon: "motion" },
+  { id: "motion", label: "Motion path", icon: "motion", when: () => false },
   { id: "media", label: "Sound & speed", icon: "music", when: (it) => it.kind === "audio" || it.kind === "video" },
   { id: "track", label: "Motion tracking: follow a spot through the video", icon: "target", when: (it) => it.kind === "video" },
   { id: "chart", label: "Chart", icon: "grid", when: (it) => it.kind === "chart" },
@@ -367,8 +367,7 @@ function UseAsMask({ item }: { item: Item }) {
   });
   return (
     <>
-      <div className="psub">Use as a mask for</div>
-      <Row label="Mask"><div className="f2w pickw">
+      <Row label="Masks"><div className="f2w pickw">
         <select className="psel" value="" onChange={(e) => { if (e.target.value) { use(e.target.value); st().toast(`${item.name} masks it now`); } }}>
           <option value="">Pick a group or item…</option>
           {groups.length > 0 && <optgroup label="Groups">{groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</optgroup>}
@@ -376,7 +375,6 @@ function UseAsMask({ item }: { item: Item }) {
         </select>
         <button className="chip" title="Pick it on the canvas or the tracks" onClick={() => startMaskPick(item.id, "for")}>Pick</button>
       </div></Row>
-      {!groups.length && <p className="hint">No groups yet: select items and press Ctrl+G to make one.</p>}
       {masking.map((m) => <div key={m.id} className="pinrow"><span>Masks {m.name}</span><button className="chip" onClick={() => stop(m.id)}>Stop</button></div>)}
     </>
   );
@@ -560,7 +558,6 @@ function RunAlong({ item }: { item: Item }) {
   }
   return (
     <>
-      <div className="psub">Run along a path</div>
       <Row label="Run along">
         <select className="psel" value={item.onPath ?? ""} onChange={(e) => choose(e.target.value)}>
           <option value="">Nothing (normal text)</option>
@@ -598,6 +595,18 @@ function RunAlong({ item }: { item: Item }) {
 }
 
 /** Mask (show only inside/outside another item) and repeater (extra copies). */
+function MaskTabs({ start, mask, path }: { start: "mask" | "path"; mask: React.ReactNode; path: React.ReactNode }) {
+  const [tab, setTab] = useState(start);
+  return (
+    <>
+      <div className="atabs2" role="tablist">
+        {([["mask", "Mask"], ["path", "Path"]] as const).map(([k, l]) => <button key={k} role="tab" className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{l}</button>)}
+      </div>
+      {tab === "mask" ? mask : path}
+    </>
+  );
+}
+
 function MaskAndRepeat({ item, only }: { item: Item; only?: "mask" }) {
   const { edit } = st();
   const project = useStore((x) => x.project);
@@ -609,7 +618,6 @@ function MaskAndRepeat({ item, only }: { item: Item; only?: "mask" }) {
     <>
       {!only && <ParentAndLinks item={item} />}
       {only && <>
-      <div className="psub" style={{ marginTop: 0 }}>Mask this item</div>
       <Row label="Mask with"><div className="f2w pickw">
         <select className="psel" value={item.mask?.by ?? ""} onChange={(e) => setI((it) => {
           if (!e.target.value) { delete it.mask; return; }
@@ -644,7 +652,6 @@ function MaskAndRepeat({ item, only }: { item: Item; only?: "mask" }) {
       {item.mask && <Row label="Moving the mask"><Seg value={item.mask.free ? "free" : "along"} options={[["along", "Takes this along", "Drag the mask on the canvas and this item moves with it, keeping its place inside"], ["free", "Leaves this put", "The mask moves over this item, revealing other parts of it"]]} onChange={(v) => setI((it) => { it.mask = { ...it.mask!, free: v === "free" || undefined }; })} /></Row>}
       {item.mask && <Row label="The shape"><Seg value={item.mask.inside ? "show" : "hide"} options={[["show", "Shown"], ["hide", "Hidden"]]} onChange={(v) => setI((it) => { it.mask = { ...it.mask!, inside: v === "show" || undefined }; })} /></Row>}
       <UseAsMask item={item} />
-      {canRide(item) && <RunAlong item={item} />}
       </>}
       {!only && <>
       <div className="psub">Repeater</div>
@@ -970,6 +977,48 @@ export function EditPanel() {
       );
     }
     if (!item) return null;
+    const it0 = item;
+    // following a motion clip's path
+    const followPath = () => {
+      const item = it0;
+      const motions = project.items.filter((i) => i.kind === "motion");
+      const f = item.follow;
+      return (
+          <>
+            <Row label="Follow">
+              <select className="psel" value={f?.motionId ?? ""} onChange={(e) => {
+                const mid = e.target.value;
+                edit((d) => {
+                  const it = d.items.find((q) => q.id === id); if (!it) return;
+                  if (!mid) { delete it.follow; return; }
+                  it.follow = { mode: it.follow?.mode ?? "exact", orient: it.follow?.orient, motionId: mid };
+                  const m = d.items.find((q) => q.id === mid); if (!m) return;
+                  // sit right under the motion clip, for the same time, stacking below anything already there
+                  it.start = m.start; it.end = m.end;
+                  it.trackId = rowBelow(d, m.trackId, m.start, m.end, it.id);
+                  // take the motion's keyframes (positions keep following the path)
+                  for (const kt of motionTimes(m)) for (const pr of ["x", "y"] as Prop[]) { const ks = (it.keys[pr] ??= []); if (!ks.some((k) => Math.abs(k.t - kt) < 1e-3)) { ks.push({ t: kt, v: it.base[pr], ease: "ease" }); ks.sort((a2, b2) => a2.t - b2.t); } }
+                });
+                if (mid) toast("Linked to the motion");
+              }}>
+                <option value="">Nothing</option>
+                {motions.map((mm) => <option key={mm.id} value={mm.id}>{mm.name} · {mm.start.toFixed(1)}–{mm.end.toFixed(1)}s</option>)}
+              </select>
+            </Row>
+            {f && <>
+              <Row label="Place"><Seg value={f.mode} options={[["exact", "Where drawn"], ["relative", "From the object"]]} onChange={(v) => setF((it) => { it.follow = { ...it.follow!, mode: v as "exact" | "relative" }; })} /></Row>
+              {item.kind === "text" && <Row label="Text"><Seg value={f.letters === false ? "block" : "letters"} options={[["letters", "Bends along the path"], ["block", "Moves as one block"]]} onChange={(v) => setF((it) => { it.follow = { ...it.follow!, letters: v === "letters" }; })} /></Row>}
+              <Row label="Face direction"><Seg value={f.orient ? "on" : "off"} options={[["off", "No"], ["on", "Turn along path"]]} onChange={(v) => setF((it) => { it.follow = { ...it.follow!, orient: v === "on" }; })} /></Row>
+            </>}
+          </>
+      );
+    };
+    // Mask: Mask (cut it, or cut others) · Path (follow a motion path, run along a line or shape)
+    const maskTabs = (start: "mask" | "path") => (
+      <MaskTabs key={item.id + start} start={start}
+        mask={<MaskAndRepeat item={item} only="mask" />}
+        path={<>{followPath()}{canRide(item) && <RunAlong item={item} />}</>} />
+    );
     switch (panel.section) {
       case "animate": {
         const A: ItemAnim = item.anim ?? {};
@@ -1142,38 +1191,7 @@ export function EditPanel() {
             </>
           );
         }
-        const motions = project.items.filter((i) => i.kind === "motion");
-        const f = item.follow;
-        return (
-          <>
-            {!motions.length && <p className="hint">Add a Motion clip first (the wave button on the left toolbar), draw its path, then link this object to it.</p>}
-            <Row label="Follow">
-              <select className="psel" value={f?.motionId ?? ""} onChange={(e) => {
-                const mid = e.target.value;
-                edit((d) => {
-                  const it = d.items.find((q) => q.id === id); if (!it) return;
-                  if (!mid) { delete it.follow; return; }
-                  it.follow = { mode: it.follow?.mode ?? "exact", orient: it.follow?.orient, motionId: mid };
-                  const m = d.items.find((q) => q.id === mid); if (!m) return;
-                  // sit right under the motion clip, for the same time, stacking below anything already there
-                  it.start = m.start; it.end = m.end;
-                  it.trackId = rowBelow(d, m.trackId, m.start, m.end, it.id);
-                  // take the motion's keyframes (positions keep following the path)
-                  for (const kt of motionTimes(m)) for (const pr of ["x", "y"] as Prop[]) { const ks = (it.keys[pr] ??= []); if (!ks.some((k) => Math.abs(k.t - kt) < 1e-3)) { ks.push({ t: kt, v: it.base[pr], ease: "ease" }); ks.sort((a2, b2) => a2.t - b2.t); } }
-                });
-                if (mid) toast("Linked to the motion");
-              }}>
-                <option value="">Nothing</option>
-                {motions.map((mm) => <option key={mm.id} value={mm.id}>{mm.name} · {mm.start.toFixed(1)}–{mm.end.toFixed(1)}s</option>)}
-              </select>
-            </Row>
-            {f && <>
-              <Row label="Place"><Seg value={f.mode} options={[["exact", "Where drawn"], ["relative", "From the object"]]} onChange={(v) => setF((it) => { it.follow = { ...it.follow!, mode: v as "exact" | "relative" }; })} /></Row>
-              {item.kind === "text" && <Row label="Text"><Seg value={f.letters === false ? "block" : "letters"} options={[["letters", "Bends along the path"], ["block", "Moves as one block"]]} onChange={(v) => setF((it) => { it.follow = { ...it.follow!, letters: v === "letters" }; })} /></Row>}
-              <Row label="Face direction"><Seg value={f.orient ? "on" : "off"} options={[["off", "No"], ["on", "Turn along path"]]} onChange={(v) => setF((it) => { it.follow = { ...it.follow!, orient: v === "on" }; })} /></Row>
-            </>}
-          </>
-        );
+        return maskTabs("path");
       }
       case "text": {
         const sh = item.textShadow;
@@ -1470,7 +1488,7 @@ export function EditPanel() {
         );
       }
       case "mask":
-        return <MaskAndRepeat item={item} only="mask" />;
+        return maskTabs("mask");
       case "layer":
         return (
           <>
