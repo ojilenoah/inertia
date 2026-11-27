@@ -1541,3 +1541,23 @@ body.maskpicking .stagewrap, body.maskpicking .lanes, body.maskpicking .clip { c
 /* + after the last canvas on the canvas track */
 .lrow.canvas .cvadd { position: absolute; z-index: 4; border-radius: 4px; display: grid; place-items: center; color: var(--ink-2); background: color-mix(in srgb, var(--ink) 8%, transparent); box-shadow: inset 0 0 0 1px var(--rim, var(--line)); }
 .lrow.canvas .cvadd:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 16%, transparent); }
+/* motion tracking: the tracker's points on the canvas, its path, and its list in the edit card */
+.trkov .trkpt { cursor: move; touch-action: none; }
+.trkov .trkhit { fill: transparent; }
+.trkov .trkbox { fill: none; stroke: var(--accent); }
+.trkov .trkcross { stroke: var(--accent); fill: none; }
+.trkov .trkpt.off { opacity: .5; }
+.trkov .trkpt:hover .trkbox { fill: color-mix(in srgb, var(--accent) 18%, transparent); }
+.trkov .trktrail { fill: none; stroke: var(--accent); opacity: .55; stroke-linejoin: round; }
+.trkov .trkquad { fill: color-mix(in srgb, var(--accent) 10%, transparent); stroke: var(--accent); stroke-dasharray: 4 3; }
+.trklist { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
+.trkrow { display: flex; align-items: center; gap: 7px; padding: 4px 4px 4px 8px; border-radius: 6px; cursor: pointer; }
+.trkrow:hover { background: var(--panel-3); }
+.trkrow.on { background: color-mix(in srgb, var(--accent) 22%, var(--panel-2)); }
+.trkrow b { font: 600 12px var(--sans); }
+.trkrow small { flex: 1; font: 500 10.5px var(--mono); color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trkrow .ib { width: 24px; height: 24px; }
+.trkrun { display: flex; align-items: center; justify-content: space-between; gap: 8px; font: 500 12px var(--sans); }
+.trkuse { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+.trkuse .psel { flex: 1; min-width: 0; }
+.chip svg.i { width: 12px; height: 12px; }

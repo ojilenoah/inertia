@@ -36,6 +36,7 @@ import type { ParticleSpec } from "@moshion/engine";
 import { findBeats } from "./waveform";
 import { CONTAINER_KINDS, moveInside, placeImageInside, placeNewInside, placeVideoInside, takeOut } from "./inside";
 import { Icon } from "./Icon";
+import { TrackBody } from "./TrackPanel";
 import { Fader } from "./Fader";
 import { useStacked } from "./layout";
 
@@ -106,6 +107,7 @@ const SECTIONS: { id: PanelSection; label: string; icon: string; when?: (it: Ite
   { id: "group", label: "Group", icon: "group", when: (_it, g) => g },
   { id: "motion", label: "Motion path", icon: "motion" },
   { id: "media", label: "Sound & speed", icon: "music", when: (it) => it.kind === "audio" || it.kind === "video" },
+  { id: "track", label: "Motion tracking: follow a spot through the video", icon: "target", when: (it) => it.kind === "video" },
   { id: "chart", label: "Chart", icon: "grid", when: (it) => it.kind === "chart" },
   { id: "particles", label: "Particles", icon: "sparkle", when: (it) => it.kind === "particles" },
 ];
@@ -931,7 +933,7 @@ export function EditPanel() {
 
   const titles: Record<PanelSection, string> = {
     animate: "Animate", text: "Text", fill: "Fill & border", transform: "Position, size & 3D", rotate: "Position, size & 3D", motion: "Motion path", shape: "Shape", line: "Line", opacity: "Opacity & blend",
-    effects: "Effects", keys: "Keyframes", layer: "Layer", group: "Group", scene: "Canvas", media: "Sound & speed", chart: "Chart", particles: "Particles", mask: "Mask",
+    effects: "Effects", keys: "Keyframes", layer: "Layer", group: "Group", scene: "Canvas", media: "Sound & speed", chart: "Chart", particles: "Particles", mask: "Mask", track: "Motion tracking",
   };
 
   function body() {
@@ -1444,6 +1446,7 @@ export function EditPanel() {
           </>
         );
       }
+      case "track": return <TrackBody item={item} />;
       case "media": {
         const local = t - item.start;
         return (

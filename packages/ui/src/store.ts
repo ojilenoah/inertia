@@ -8,7 +8,7 @@ import { loadAutosave } from "./persist";
 export type Side = "left" | "right";
 export type Tool = "select" | "blade" | "ripple";
 export type Section = "exact";
-export type PanelSection = "animate" | "text" | "fill" | "transform" | "rotate" | "opacity" | "effects" | "keys" | "layer" | "group" | "scene" | "motion" | "shape" | "line" | "media" | "chart" | "particles" | "mask";
+export type PanelSection = "animate" | "text" | "fill" | "transform" | "rotate" | "opacity" | "effects" | "keys" | "layer" | "group" | "scene" | "motion" | "shape" | "line" | "media" | "chart" | "particles" | "mask" | "track";
 export type View = "home" | "edit" | "nodes" | "board";
 
 /** Picked keyframes: for each clip, the times (the item's own) that are picked. */
@@ -89,6 +89,8 @@ export interface UIState {
   lineTool: "line" | "pen" | null;
   /** Corner pin: the item whose corners are being dragged. */
   pinning?: string | null;
+  /** Motion tracking: the video whose tracker is shown on the canvas (its points to place and drag), and a run in progress. */
+  tracking?: { itemId: string; trackerId: string; run?: { dir: 1 | -1; done: number; total: number } } | null;
   /** The 3D rotate gimbal's look: a ball to tumble (default) or three rings, one per axis. */
   gimbal?: "ball" | "rings";
   /** Hand: the canvas only moves and zooms (dragging pans it, nothing gets picked). */

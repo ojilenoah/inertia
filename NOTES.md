@@ -23,7 +23,9 @@ Ideas and features we've agreed to do later. Newest at the top.
 - GitHub repo + cloud builds for the Windows .exe and Android .apk (workflow is in `.github/workflows/build.yml`)
 - Lens blur (2026-11-21): since the looks layer fix it shows again, but its edges look whitish/washed out compared with before (the blur pulls in what's outside the canvas). Revisit: clamp the blur to the canvas so the edges stay true.
 
-## Video plan (agreed 2026-11-22, not started)
+## Video plan (agreed 2026-11-22; steps 1 and 4 done 2026-11-27)
+- Done 2026-11-27, step 1: `videoengine.ts` (Mediabunny + WebCodecs). Exact frames when paused/scrubbing/playing backwards, export reads every video through it, filmstrips on video clips. Playing forwards still uses the `<video>` element (smooth, with sound). Not done: bundled ffmpeg (MOV/ProRes/HEVC the browser can't decode) and low-res proxies, both desktop-only.
+- Done 2026-11-27, step 4: `tracker.ts`, `TrackOverlay.tsx`, `TrackPanel.tsx` (edit card → Motion tracking). Point and 4-corner tracking, forwards and backwards; Follow (position), Pin onto it (corner pin), Steady the video (position lock + zoom), Keep it centred (reframe). Not done: rotation/scale from two points (follow and stabilise are position only), face tracking (step 5). Tracking speed ≈ real time; most of it is reading frames back from the GPU.
 Build in this order; each step is usable on its own.
 1. **Video engine (foundation)** — decode frames ourselves with WebCodecs (+ an MP4 demuxer) instead of seeking `<video>`: exact frames, fast, same in editor and export. Frame cache for smooth scrubbing/playback. Filmstrip thumbnails on video clips. Later on desktop: bundled ffmpeg for MOV/ProRes/HEVC and low-res proxies.
 2. **Editing essentials** — speed ramps (keyframed speed, freeze frame, smooth slow-mo); transitions between clips on the same track (crossfade, dip, wipes, zoom, slide); detach audio from video; volume keyframes; slip/slide edits; scene-cut detection (auto split).

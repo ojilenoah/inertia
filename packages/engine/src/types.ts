@@ -40,6 +40,18 @@ export type BlendMode =
   | "overlay" | "soft-light" | "hard-light" | "difference" | "exclusion" | "hue" | "saturation" | "color" | "luminosity";
 export interface Asset { id: string; name: string; kind: "image" | "video" | "audio"; url?: string; w?: number; h?: number; dur?: number }
 
+/**
+ * Motion tracking on a video clip: one point, or four corners (top-left, top-right, bottom-right, bottom-left), found
+ * frame by frame. Kept in the file's own terms, so trimming, splitting, speed and resizing the clip never break it:
+ * `t` is seconds into the file, positions are fractions of the frame (0..1, left/top = 0).
+ */
+export interface Tracker {
+  id: string;
+  name: string;
+  n: 1 | 4;
+  pts: { t: Seconds; p: [number, number][] }[];
+}
+
 export interface Item {
   id: string;
   name: string;
@@ -65,6 +77,8 @@ export interface Item {
   src?: string;
   /** Video/audio: seconds into the file where this item starts (changes when trimmed or split). */
   mediaOffset?: number;
+  /** Video: points followed through the clip (motion tracking). See Tracker. */
+  trackers?: Tracker[];
   /** Item keys: `t` is relative to the item's start, so moving the item moves its animation. */
   keys: Keys;
   fontWeight?: number;

@@ -13,6 +13,7 @@ import type { SceneEffect } from "@moshion/engine";
 import type { MorphChar } from "@moshion/engine";
 import { isPinned, pinCSS, pinHAt } from "@moshion/engine";
 import { PinEditor } from "./PinEdit";
+import { TrackOverlay } from "./TrackOverlay";
 import { measurer, morphLayout } from "./textmorph";
 import { groupOf, groupValues, itemState, itemsInGroup, ownValue, pieceFx, setValue, splitPieces, textAnimOf, textUnit } from "@moshion/engine";
 import { prop } from "./EditTools";
@@ -1450,6 +1451,8 @@ export function Viewer() {
                 </button>
               );
             })()}
+            {/* motion tracking: the tracker's points on the video, to place and drag */}
+            {sel?.kind === "video" && ui.tracking?.itemId === sel.id && ui.multi.length < 2 && <TrackOverlay item={sel} k={k} />}
             {/* corner pin: its corners while pinning; just the pinned outline otherwise */}
             {sel && PINNABLE(sel) && selState?.visible && ui.multi.length < 2 && (ui.pinning === sel.id || isPinned(sel)) && (
               <PinEditor item={sel} s={selState} k={k} edit={ui.pinning === sel.id} />
