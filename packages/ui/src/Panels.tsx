@@ -255,11 +255,14 @@ export function Rail() {
   const touch = useTouch();
   const tools: [string, string, string][] = [["text", "type", "Text"], ["glass", "drop", "Liquid glass (effect shape)"]];
   const lineTool = useStore((s) => s.ui.lineTool);
+  const blade = useStore((s) => s.ui.tool === "blade");
   return (
     <nav className="card rail" aria-label="Tools">
       {/* phones: the menu, History and the held keys are on the right sidebar */}
       {touch && !stacked && <><TouchMods /><hr /></>}
       <SelectHand />
+      {/* phones: the blade (cut a clip where you tap it) lives here; tap again to put it away */}
+      {stacked && <button className={"ib" + (blade ? " on" : "")} title="Blade: tap a clip to cut it there (B)" aria-label="Blade" onClick={() => useStore.getState().setUI({ tool: blade ? "select" : "blade", hand: false })}><Icon name="scissors" /></button>}
       <hr />
       <ShapePicker />
       <button className="ib" title="Line" aria-label="Add a line" onClick={() => addLine()}><Icon name="line" /></button>
@@ -271,13 +274,14 @@ export function Rail() {
       <button className="ib" title="Camera" aria-label="Add camera" onClick={() => addCamera()}><Icon name="camera" /></button>
       <hr />
       {(!wide || stacked) && <button className={"ib" + (assetsOn ? " on" : "")} title="Media: imported pictures, videos and audio" aria-label="Media" onClick={() => useStore.getState().setUI({ assets: !assetsOn })}><Icon name="image" /></button>}
-      <button className="ib" title="Import pictures, videos or audio" aria-label="Import media" onClick={async () => {
+      {/* phones: importing is in Media (its + button) */}
+      {!stacked && <button className="ib" title="Import pictures, videos or audio" aria-label="Import media" onClick={async () => {
         const f = await pickMedia();
         if (!f.length) return;
         const added = await importFiles(f);
         useStore.getState().setUI({ assets: true });
         if (added.length === 1) placeAsset(added[0]);
-      }}><Icon name="plus" /></button>
+      }}><Icon name="plus" /></button>}
       <button className="ib" title="Import .obj 3D model (coming next)" aria-label="Import 3D model" onClick={() => useStore.getState().toast("3D models (.obj) come with the WebGL renderer")}><Icon name="cube" /></button>
     </nav>
   );

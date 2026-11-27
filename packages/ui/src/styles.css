@@ -1571,3 +1571,6 @@ body.maskpicking .stagewrap, body.maskpicking .lanes, body.maskpicking .clip { c
 .mo.phone .tlbar { justify-content: space-evenly; gap: 0; }
 .mo.phone .tlbar :is(.tlside, .tlplay, .tlside > *, .tlplay > *):not(button) { display: contents; }
 .mo.phone .tlbar .zunit { display: none !important; }
+/* phones: every button in the bar over the tracks is a square */
+.mo.phone .tlbar button { width: 28px; height: 28px; min-width: 28px; padding: 0; display: grid; place-items: center; flex: none; }
+.mo.phone .tlbar .play.play { width: 28px; height: 28px; margin: 0; }

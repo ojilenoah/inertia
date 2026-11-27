@@ -18,7 +18,7 @@ import type { PinchDetail } from "./touch";
 import { openPanelAt, pickedCount, pickedOn, useStore } from "./store";
 import { Icon } from "./Icon";
 import { placeAsset } from "./media";
-import { LoopButton, PlayerBar, Transport } from "./Panels";
+import { PlayerBar, Transport } from "./Panels";
 import { useAppliedUiScale, useStacked } from "./layout";
 import { Fader } from "./Fader";
 import { askConfirm } from "./Confirm";
@@ -595,13 +595,13 @@ export function Timeline() {
         </motion.div>
       )}</AnimatePresence>
       <div className="tlbar">
-        {/* phones: start / play / next sit in the exact middle, three buttons each side: Blade, Ripple and Split
-            (the cutting tools) to their left; loop, snapping and the graph to their right */}
+        {/* phones: start / play / next sit in the exact middle, two buttons each side: Ripple and Split to their
+            left; snapping and the graph to their right (the arrow and the blade are in the sidebar; no loop) */}
         {phone ? (<>
         <div className="tlside left">
           <div className="seg sm" role="group" aria-label="Timeline tool">
             {/* phones: no arrow here (the sidebar's arrow is the one select); tapping Blade or Ripple again turns it off */}
-            {tools.filter(([id]) => !(phone && id === "select")).map(([id, ic, tip]) => (
+            {tools.filter(([id]) => !(phone && (id === "select" || id === "blade"))).map(([id, ic, tip]) => (
               <button key={id} className={ui.tool === id ? "on" : ""} title={tip} onClick={() => setUI({ tool: phone && ui.tool === id ? "select" : id })}><Icon name={ic} /></button>
             ))}
           </div>
@@ -609,7 +609,6 @@ export function Timeline() {
         </div>
         <div className="tlplay"><Transport /></div>
         <div className="tlside right">
-          <LoopButton />
           <button className={"ib" + (ui.snap ? " on" : "")} title="Snapping (N)" onClick={() => setUI({ snap: !ui.snap })}><Icon name="magnet" /></button>
           <button className={"ib" + (ui.graph ? " on" : "")} title="Keyframe graph under the selected item (C)" onClick={() => setUI({ graph: !ui.graph })}><Icon name="curve" /></button>
           <span className="zunit" title="Time between the ruler's small ticks">{tickLabel}</span>
