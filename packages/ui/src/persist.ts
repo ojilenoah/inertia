@@ -99,7 +99,7 @@ export async function openProject(): Promise<"project" | "backup" | null> {
     } else {
       file = await new Promise<File>((res, rej) => {
         const inp = document.createElement("input");
-        inp.type = "file"; inp.accept = `${EXT},.json`;
+        inp.type = "file"; inp.accept = /Android/i.test(navigator.userAgent) ? "*/*" : `${EXT},.json`; // Android: file endings would list nothing
         inp.onchange = () => (inp.files?.[0] ? res(inp.files[0]) : rej(new Error("No file")));
         inp.click();
       });

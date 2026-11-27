@@ -136,7 +136,7 @@ export function PlayerBar() {
   // phones: a sidebar beside the video: menu and History on top; held keys, then undo / redo at the bottom
   if (stacked) return (
     <div className="pbar">
-      <div className="pbgroup pbtop"><PhoneMenu /><HistoryButton /></div>
+      <div className="pbgroup pbtop"><PhoneMenu /><HistoryButton />{loopBtn}</div>
       <span />
       {/* the play controls are in the track toolbar on phones */}
       <div className="pbgroup pbbot">{touch && <TouchMods />}<UndoButton /><RedoButton /></div>

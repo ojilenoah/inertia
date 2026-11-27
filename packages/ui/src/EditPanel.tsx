@@ -913,7 +913,9 @@ export function EditPanel() {
     const mo = document.querySelector(".mo")?.getBoundingClientRect() ?? { left: 0, top: 0, width: innerWidth, height: innerHeight };
     // on the item's own clip in its track (the background's card: on the background clip); else on the bar it came from
     const clipTop = (panel.section === "scene" ? document.querySelector(".cvseg") : panel.itemId ? document.querySelector(`.clip[data-item="${panel.itemId}"]`) : null)?.getBoundingClientRect().top;
-    const from = clipTop != null && clipTop > 0 ? clipTop : atBar && panel.anchor ? panel.anchor.top : undefined;
+    const raw = clipTop != null && clipTop > 0 ? clipTop : atBar && panel.anchor ? panel.anchor.top : undefined;
+    // a clip scrolled off the bottom of the screen: the card stops at the bottom instead
+    const from = raw == null ? undefined : Math.min(raw, mo.top + mo.height - 4);
     if (from != null && from - mo.top > 200) {
       above = true;
       const gap = panel.section === "scene" ? 0 : 6; // the canvas card sits right on the canvas clip

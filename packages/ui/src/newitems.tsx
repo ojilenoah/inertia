@@ -73,7 +73,7 @@ const hex = (c: string) => {
   return m ? "#" + [m[1], m[2], m[3]].map((x) => (+x).toString(16).padStart(2, "0")).join("") : /^#[0-9a-f]{6}$/i.test(c) ? c : null;
 };
 export async function importSVG() {
-  const file = await new Promise<File | null>((res) => { const inp = document.createElement("input"); inp.type = "file"; inp.accept = ".svg,image/svg+xml"; inp.onchange = () => res(inp.files?.[0] ?? null); inp.click(); });
+  const file = await new Promise<File | null>((res) => { const inp = document.createElement("input"); inp.type = "file"; inp.accept = /Android/i.test(navigator.userAgent) ? "image/svg+xml" : ".svg,image/svg+xml"; inp.onchange = () => res(inp.files?.[0] ?? null); inp.click(); });
   if (!file) return;
   const holder = document.createElement("div");
   holder.style.cssText = "position:fixed;left:-99999px;top:0;width:1000px;height:1000px;visibility:hidden";

@@ -85,7 +85,8 @@ export async function importFiles(files: File[]): Promise<Asset[]> {
 export function pickMedia(): Promise<File[]> {
   return new Promise((res) => {
     const inp = document.createElement("input");
-    inp.type = "file"; inp.multiple = true; inp.accept = "image/*,video/*,audio/*";
+    // Android's picker only uses the first type in a list (images only): there it lists every file; others are skipped on import
+    inp.type = "file"; inp.multiple = true; inp.accept = /Android/i.test(navigator.userAgent) ? "*/*" : "image/*,video/*,audio/*";
     inp.onchange = () => res([...(inp.files ?? [])]);
     inp.click();
   });
