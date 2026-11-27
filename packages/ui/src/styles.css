@@ -1587,3 +1587,47 @@ body .fbar.under .ib { width: 36px; height: 36px; }
 body .fbar.under .ib svg.i { width: 20px; height: 20px; }
 /* a card that starts with tabs: the tabs sit right under its title */
 .popbody:has(> .atabs2:first-child) { padding-top: 4px; }
+
+/* ---------- export ---------- */
+.exbox { width: 400px; gap: 12px; padding: 14px; max-height: calc(100vh - var(--sa-t) - var(--sa-b) - 24px); overflow-y: auto; }
+.exposter { position: relative; display: grid; place-items: center; background: var(--panel-2); border-radius: 10px; padding: 12px; }
+.exframe { max-width: 100%; max-height: 220px; height: 220px; background: #000; border-radius: 6px; overflow: hidden; display: grid; place-items: center; box-shadow: 0 10px 30px -12px rgba(0,0,0,.6); }
+.exframe canvas { max-width: 100%; max-height: 100%; width: auto; height: 100%; object-fit: contain; display: block; }
+.exlabel { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); font: 500 10.5px var(--mono); color: #fff; background: rgba(0,0,0,.55); padding: 3px 8px; border-radius: 20px; white-space: nowrap; }
+.exopts { display: flex; flex-direction: column; gap: 2px; background: var(--panel-2); border-radius: 10px; padding: 4px 10px; }
+.exrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 38px; font: 500 12px var(--sans); color: var(--ink-3); }
+.exrow + .exrow { border-top: 1px solid var(--line); }
+.exseg { display: flex; gap: 2px; background: var(--panel-3); border-radius: 7px; padding: 2px; flex-wrap: wrap; justify-content: flex-end; }
+.exseg button { height: 26px; padding: 0 9px; border-radius: 5px; font: 600 11.5px var(--sans); color: var(--ink-3); }
+.exseg button.on { background: var(--panel); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+.exrange { display: flex; align-items: center; gap: 6px; }
+.exrange input { width: 64px; height: 28px; border-radius: 6px; border: 0; background: var(--panel-3); color: var(--ink); text-align: center; font: 500 12px var(--mono); }
+.exrange i { font-style: normal; color: var(--ink-3); }
+.exfolder { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.exfolder b { font: 600 12px var(--sans); color: var(--ink); max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.exfolder i { font: 600 11.5px var(--sans); font-style: normal; color: var(--sel); }
+.exlinks { display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; }
+.exrun { position: relative; display: grid; justify-items: center; gap: 8px; padding: 18px 0 6px; }
+.exring { width: 132px; height: 132px; transform: rotate(-90deg); }
+.exring circle { fill: none; stroke-width: 8; }
+.exring .bg { stroke: var(--panel-3); }
+.exring .fg { stroke: var(--brand, #E0571A); stroke-linecap: round; transition: stroke-dashoffset .15s; }
+.expct { position: absolute; top: 18px; height: 132px; display: grid; place-items: center; font: 700 26px var(--sans); color: var(--ink); }
+.exstep { font: 500 12px var(--sans); color: var(--ink-3); text-align: center; }
+.explayer { position: relative; width: 100%; border-radius: 10px; overflow: hidden; background: #000; display: grid; place-items: center; }
+.explayer video, img.explayer { display: block; width: 100%; max-height: 52vh; object-fit: contain; background: #000; }
+.exbig { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: rgba(0,0,0,.45); backdrop-filter: blur(6px); }
+.exbig svg { width: 26px; height: 26px; margin-left: 3px; }
+.exctl { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 10px; padding: 18px 12px 10px; background: linear-gradient(transparent, rgba(0,0,0,.7)); color: #fff; font: 500 11px var(--mono); }
+.exctl button { width: 28px; height: 28px; display: grid; place-items: center; color: #fff; flex: none; }
+.exctl input[type=range] { flex: 1; min-width: 0; height: 4px; -webkit-appearance: none; appearance: none; border-radius: 2px; background: linear-gradient(to right, #fff var(--p), rgba(255,255,255,.3) var(--p)); }
+.exctl input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+.exctl input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border: 0; border-radius: 50%; background: #fff; }
+.exmeta { display: flex; justify-content: center; gap: 14px; font: 500 11.5px var(--sans); color: var(--ink-3); }
+.exsaved { text-align: center; font: 500 12.5px var(--sans); color: var(--ink-2); }
+.exsaved b { color: var(--ink); }
+.exacts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.exacts > * { display: grid; place-items: center; height: 40px; text-decoration: none; }
+.exzip { padding: 30px 10px; text-align: center; font: 600 13px var(--sans); background: var(--panel-2); border-radius: 10px; }
+/* phones: the export sheet fills the width */
+.mo.phone .exbox { width: calc(100vw - var(--sa-l) - var(--sa-r) - 16px); }

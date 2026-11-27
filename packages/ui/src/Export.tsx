@@ -6,6 +6,8 @@ import type { Project } from "@moshion/engine";
 import { useStore } from "./store";
 import { closeSession, mixAudio, prepare, renderFrame, type RenderSession } from "./render";
 import { GifWriter } from "./gif";
+import { PlayIcon } from "./Icon";
+import { exportFolder, hasExportFolder, openSaved, pickExportFolder, saveToExportFolder, shareSaved } from "./exportfolder";
 
 type Phase = { k: "setup" } | { k: "run"; frame: number; total: number; step: string } | { k: "done"; url: string; name: string; size: number; secs: number; audio: boolean } | { k: "error"; msg: string };
 
@@ -190,9 +192,12 @@ export function ExportDialog() {
   const [rangeKind, setRangeKind] = useState<"all" | "loop" | "custom">("all");
   const [custom, setCustom] = useState<[number, number]>([0, 0]);
   const [phase, setPhase] = useState<Phase>({ k: "setup" });
+  // the Android app: the folder exports go into (chosen on the first start, or right here)
+  const [folder, setFolder] = useState(() => exportFolder());
+  const [saved, setSaved] = useState<{ uri: string; mime: string } | null>(null);
   const cancel = useRef(false);
   const t0 = useRef(0);
-  useEffect(() => { if (open) { setPhase({ k: "setup" }); cancel.current = false; } }, [open]);
+  useEffect(() => { if (open) { setPhase({ k: "setup" }); setSaved(null); setFolder(exportFolder()); cancel.current = false; } }, [open]);
   if (!open) return null;
 
   const base = project.name.replace(/[^\w\- ]+/g, " ").replace(/\s+/g, " ").trim() || "inertia";
@@ -200,7 +205,14 @@ export function ExportDialog() {
   const range: [number, number] = rangeKind === "loop" && loop ? [loop.a, Math.min(loop.b, project.duration)]
     : rangeKind === "custom" ? [Math.max(0, Math.min(custom[0], project.duration)), Math.max(0, Math.min(custom[1] || project.duration, project.duration))] : [0, project.duration];
   const close = () => { if (phase.k === "run") return; if (phase.k === "done") URL.revokeObjectURL(phase.url); setUI({ exporting: false }); };
+  const changeFolder = async () => { const f = await pickExportFolder(); if (f) setFolder(f); return f; };
   const start = async () => {
+    // Android: exports go into a folder of the person's choosing: ask for it first if there isn't one yet
+    let where = folder;
+    if (hasExportFolder() && !where) {
+      where = await changeFolder();
+      if (!where) { setPhase({ k: "error", msg: "Pick a folder for your exports first, then export." }); return; }
+    }
     cancel.current = false; t0.current = performance.now();
     useStore.setState({ playing: false });
     setPhase({ k: "run", frame: 0, total: 1, step: "Starting" });
@@ -210,83 +222,158 @@ export function ExportDialog() {
         ? { blob: await exportGIF(project, scale, range, prog, () => cancel.current, shape), audio: false }
         : format === "zip" ? { blob: await exportPNGs(project, scale, range, prog, () => cancel.current, shape), audio: false }
         : await exportMP4(project, scale, prog, () => cancel.current, range, shape, quality);
+      const fileName = hasExportFolder() ? `${base} ${new Date().toISOString().slice(0, 16).replace(/[T:]/g, "-")}${format === "zip" ? " frames" : ""}.${format}` : name;
+      if (hasExportFolder()) {
+        setPhase({ k: "run", frame: 0, total: 100, step: `Saving to ${where}` });
+        setSaved(await saveToExportFolder(blob, fileName, (f) => setPhase({ k: "run", frame: Math.round(f * 100), total: 100, step: `Saving to ${where}` })));
+      }
       const url = URL.createObjectURL(blob);
-      setPhase({ k: "done", url, name, size: blob.size, secs: (performance.now() - t0.current) / 1000, audio });
-      const a = document.createElement("a"); a.href = url; a.download = name; a.click();
+      setPhase({ k: "done", url, name: fileName, size: blob.size, secs: (performance.now() - t0.current) / 1000, audio });
+      if (!hasExportFolder()) { const a = document.createElement("a"); a.href = url; a.download = fileName; a.click(); }
     } catch (e) {
       const msg = (e as Error).message;
       setPhase(msg === "cancelled" ? { k: "setup" } : { k: "error", msg });
     }
   };
   const [W, H] = outSize(project, scale, shape);
-  const frames = Math.round((range[1] - range[0]) * (format === "gif" ? Math.min(project.fps, 25) : project.fps));
+  const fps = format === "gif" ? Math.min(project.fps, 25) : project.fps;
   const savePNG = async () => {
     const b = await exportPNG(project, scale, useStore.getState().t);
-    const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `${base} ${useStore.getState().t.toFixed(2)}s.png`; a.click();
+    const nm = `${base} ${useStore.getState().t.toFixed(2)}s.png`;
+    if (hasExportFolder()) {
+      if (!folder && !(await changeFolder())) return;
+      await saveToExportFolder(b, nm).then(() => useStore.getState().toast(`Picture saved to ${exportFolder()}`)).catch((e) => useStore.getState().toast((e as Error).message));
+      return;
+    }
+    const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = nm; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   };
+  const seg = <T extends string | number>(value: T, opts: readonly (readonly [T, string])[], set: (v: T) => void) => (
+    <span className="exseg">{opts.map(([v, l]) => <button key={String(v)} className={value === v ? "on" : ""} onClick={() => set(v)}>{l}</button>)}</span>
+  );
+  const pct = phase.k === "run" ? Math.round((phase.frame / Math.max(1, phase.total)) * 100) : 0;
 
   return (
     <motion.div {...anim.fade} className="xback" onPointerDown={(e) => { if (e.target === e.currentTarget) close(); }}>
-      <motion.div {...anim.sheet} className="xbox">
-        <div className="xhead"><b>Export</b><span className="sp" />{phase.k !== "run" && <button className="xclose" onClick={close} aria-label="Close">×</button>}</div>
+      <motion.div {...anim.sheet} className="xbox exbox">
+        <div className="xhead"><b>{phase.k === "done" ? "Exported" : "Export"}</b><span className="sp" />{phase.k !== "run" && <button className="xclose" onClick={close} aria-label="Close">×</button>}</div>
         {phase.k === "setup" || phase.k === "error" ? (
           <>
-            <div className="xrow"><span>Format</span>
-              <span className="gseg2">{([["mp4", "MP4 video"], ["gif", "GIF"], ["zip", "See-through PNGs"]] as const).map(([v, l]) => <button key={v} className={format === v ? "on" : ""} onClick={() => setFormat(v)}>{l}</button>)}</span>
+            <Poster project={project} W={W} H={H} label={`${W}×${H} · ${fps} fps · ${(range[1] - range[0]).toFixed(1)}s`} />
+            <div className="exopts">
+              <div className="exrow"><span>Format</span>{seg(format, [["mp4", "Video"], ["gif", "GIF"], ["zip", "PNG frames"]] as const, setFormat)}</div>
+              <div className="exrow"><span>Size</span>{seg(scale, [[1, "Full"], [0.5, "Half"]] as const, setScale)}</div>
+              {format === "mp4" && <div className="exrow"><span>Quality</span>{seg(quality, [[0.5, "Smaller"], [1, "Standard"], [2, "Best"]] as const, setQuality)}</div>}
+              <div className="exrow"><span>Shape</span>{seg(shape.aspect, [["own", "As made"], ["9:16", "9:16"], ["1:1", "1:1"], ["4:5", "4:5"], ["16:9", "16:9"]] as const, (v) => setShape({ ...shape, aspect: v }))}</div>
+              {shape.aspect !== "own" && <div className="exrow"><span>Reframe</span>{seg(shape.fit, [["fit", "Fit"], ["fill", "Fill"]] as const, (v) => setShape({ ...shape, fit: v }))}</div>}
+              <div className="exrow"><span>Part</span>{seg(rangeKind, [["all", "Whole"], ...(loop ? [["loop", "Loop"] as const] : []), ["custom", "From – to"]] as const, (v) => { setRangeKind(v); if (v === "custom" && !custom[1]) setCustom([0, project.duration]); })}</div>
+              {rangeKind === "custom" && (
+                <div className="exrow"><span>Seconds</span>
+                  <span className="exrange">
+                    <input type="number" step={0.1} min={0} value={custom[0]} onChange={(e) => setCustom([+e.target.value, custom[1]])} /><i>to</i>
+                    <input type="number" step={0.1} min={0} value={custom[1]} onChange={(e) => setCustom([custom[0], +e.target.value])} />
+                  </span>
+                </div>
+              )}
+              {hasExportFolder() && <div className="exrow"><span>Saves to</span><button className="exfolder" onClick={changeFolder}><b>{folder || "Choose a folder"}</b><i>{folder ? "Change" : ""}</i></button></div>}
             </div>
-            <div className="xrow"><span>Shape</span>
-              <span className="gseg2">{([["own", "As made"], ["9:16", "9:16"], ["1:1", "1:1"], ["4:5", "4:5"], ["16:9", "16:9"]] as const).map(([v, l]) => <button key={v} className={shape.aspect === v ? "on" : ""} onClick={() => setShape({ ...shape, aspect: v })}>{l}</button>)}</span>
-            </div>
-            {shape.aspect !== "own" && <div className="xrow"><span>Reframe</span>
-              <span className="gseg2"><button className={shape.fit === "fit" ? "on" : ""} onClick={() => setShape({ ...shape, fit: "fit" })}>Fit (bars)</button><button className={shape.fit === "fill" ? "on" : ""} onClick={() => setShape({ ...shape, fit: "fill" })}>Fill (crop)</button></span>
-            </div>}
-            {format === "mp4" && <div className="xrow"><span>Quality</span>
-              <span className="gseg2">{([[0.5, "Smaller file"], [1, "Standard"], [2, "Best"]] as const).map(([v, l]) => <button key={v} className={quality === v ? "on" : ""} onClick={() => setQuality(v)}>{l}</button>)}</span>
-            </div>}
-            <div className="xrow"><span>Part</span>
-              <span className="gseg2">
-                <button className={rangeKind === "all" ? "on" : ""} onClick={() => setRangeKind("all")}>Whole video</button>
-                {loop && <button className={rangeKind === "loop" ? "on" : ""} onClick={() => setRangeKind("loop")}>Loop region</button>}
-                <button className={rangeKind === "custom" ? "on" : ""} onClick={() => { setRangeKind("custom"); if (!custom[1]) setCustom([0, project.duration]); }}>From – to</button>
-              </span>
-            </div>
-            {rangeKind === "custom" && (
-              <div className="xrow"><span>Seconds</span>
-                <span className="hsize">
-                  <input type="number" step={0.1} min={0} value={custom[0]} onChange={(e) => setCustom([+e.target.value, custom[1]])} /> to
-                  <input type="number" step={0.1} min={0} value={custom[1]} onChange={(e) => setCustom([custom[0], +e.target.value])} />
-                </span>
-              </div>
-            )}
-            <div className="xrow"><span>Size</span>
-              <span className="gseg2">{[[1, "Full"], [0.5, "Half"]].map(([v, l]) => <button key={v} className={scale === v ? "on" : ""} onClick={() => setScale(v as number)}>{l}</button>)}</span>
-            </div>
-            <div className="xrow"><span>Output</span><b className="mono">{W}×{H} · {format === "gif" ? Math.min(project.fps, 25) : project.fps} fps · {(range[1] - range[0]).toFixed(1)}s · {frames} frames</b></div>
             {phase.k === "error" && <div className="xerr">{phase.msg}</div>}
             <button className="hcreate xgo" onClick={start}>Export {format === "gif" ? "GIF" : format === "zip" ? "frames" : "video"}</button>
-            <button className="hlink" style={{ alignSelf: "center" }} onClick={savePNG}>Save the frame at the playhead as a picture (PNG)</button>
-            {chapters.length > 0 && <button className="hlink" style={{ alignSelf: "center" }} onClick={() => {
-              const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
-              const lines = [...(chapters[0].t > 0.5 ? ["0:00 Start"] : []), ...chapters.map((c) => `${fmt(c.t)} ${c.label}`)];
-              navigator.clipboard.writeText(lines.join("\n")).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
-            }}>{copied ? "Chapters copied ✓" : `Copy ${chapters.length} chapter${chapters.length === 1 ? "" : "s"} (for YouTube descriptions)`}</button>}
+            <div className="exlinks">
+              <button className="hlink" onClick={savePNG}>Save this frame as a picture</button>
+              {chapters.length > 0 && <button className="hlink" onClick={() => {
+                const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+                const lines = [...(chapters[0].t > 0.5 ? ["0:00 Start"] : []), ...chapters.map((c) => `${fmt(c.t)} ${c.label}`)];
+                navigator.clipboard.writeText(lines.join("\n")).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
+              }}>{copied ? "Chapters copied ✓" : `Copy ${chapters.length} chapter${chapters.length === 1 ? "" : "s"}`}</button>}
+            </div>
           </>
         ) : phase.k === "run" ? (
-          <>
-            <div className="xbar"><i style={{ width: `${(phase.frame / phase.total) * 100}%` }} /></div>
-            <div className="xrow"><span>{phase.step}</span><b className="mono">{phase.frame} / {phase.total}</b></div>
-            <button className="hlink xcancel" onClick={() => { cancel.current = true; }}>Cancel</button>
-          </>
+          <div className="exrun">
+            <svg className="exring" viewBox="0 0 120 120" aria-hidden="true">
+              <circle cx="60" cy="60" r="52" className="bg" />
+              <circle cx="60" cy="60" r="52" className="fg" style={{ strokeDasharray: 2 * Math.PI * 52, strokeDashoffset: 2 * Math.PI * 52 * (1 - pct / 100) }} />
+            </svg>
+            <b className="expct">{pct}%</b>
+            <span className="exstep">{phase.step}{phase.total > 1 && !phase.step.startsWith("Saving") ? ` · ${phase.frame} / ${phase.total}` : ""}</span>
+            <button className="hlink" onClick={() => { cancel.current = true; }}>Cancel</button>
+          </div>
         ) : (
           <>
-            <div className="xdone">Saved <b>{phase.name}</b></div>
-            <div className="xrow"><span>{(phase.size / 1e6).toFixed(1)} MB · took {phase.secs.toFixed(1)}s</span><span>{phase.audio ? "with sound" : "no sound"}</span></div>
-            {phase.name.endsWith(".zip") ? null : phase.name.endsWith(".gif") ? <img className="xprev" src={phase.url} alt="" style={{ objectFit: "contain" }} /> : <video className="xprev" src={phase.url} controls />}
-            <a className="hcreate xgo" href={phase.url} download={phase.name}>Download again</a>
+            {phase.name.endsWith(".zip") ? <div className="exzip">{phase.name}</div>
+              : phase.name.endsWith(".gif") ? <img className="explayer" src={phase.url} alt="" />
+              : <ClipPlayer src={phase.url} />}
+            <div className="exmeta">
+              <span>{(phase.size / 1e6).toFixed(1)} MB</span><span>{phase.audio ? "With sound" : "No sound"}</span><span>{phase.secs.toFixed(1)}s</span>
+            </div>
+            {saved ? (
+              <>
+                <div className="exsaved">Saved to <b>{exportFolder() || folder}</b></div>
+                <div className="exacts">
+                  <button className="hcreate" onClick={() => openSaved(saved.uri, saved.mime)}>Open</button>
+                  <button className="hghost" onClick={() => shareSaved(saved.uri, saved.mime)}>Share</button>
+                </div>
+              </>
+            ) : (
+              <div className="exacts">
+                <a className="hcreate" href={phase.url} download={phase.name}>Download again</a>
+                <button className="hghost" onClick={close}>Done</button>
+              </div>
+            )}
           </>
         )}
       </motion.div>
     </motion.div>
+  );
+}
+
+/** The frame at the playhead, small, at the export's shape. */
+function Poster({ project, W, H, label }: { project: Project; W: number; H: number; label: string }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const t = useStore((s) => s.t);
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      const k = Math.min(1, 480 / Math.max(project.width, project.height));
+      const w = Math.max(2, Math.round(project.width * k)), h = Math.max(2, Math.round(project.height * k));
+      const rs = await prepare(project, w, h);
+      const c = document.createElement("canvas"); c.width = w; c.height = h;
+      await renderFrame(c, project, t, rs);
+      await closeSession(rs);
+      const out = ref.current;
+      if (!live || !out) return;
+      out.width = w; out.height = h; out.getContext("2d")!.drawImage(c, 0, 0);
+    })().catch(() => {});
+    return () => { live = false; };
+  }, [project, t]);
+  return (
+    <div className="exposter">
+      <div className="exframe" style={{ aspectRatio: `${W} / ${H}` }}><canvas ref={ref} /></div>
+      <span className="exlabel">{label}</span>
+    </div>
+  );
+}
+
+/** The exported video: tap to play or pause, a bar to scrub, and the time; no browser controls. */
+function ClipPlayer({ src }: { src: string }) {
+  const v = useRef<HTMLVideoElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [t, setT] = useState(0);
+  const [dur, setDur] = useState(0);
+  const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+  const toggle = () => { const el = v.current; if (!el) return; if (el.paused) el.play().catch(() => {}); else el.pause(); };
+  return (
+    <div className="explayer">
+      <video ref={v} src={src} playsInline loop onClick={toggle}
+        onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
+        onLoadedMetadata={(e) => setDur(e.currentTarget.duration || 0)} onTimeUpdate={(e) => setT(e.currentTarget.currentTime)} />
+      {!playing && <button className="exbig" onClick={toggle} aria-label="Play"><PlayIcon playing={false} /></button>}
+      <div className="exctl">
+        <button onClick={toggle} aria-label={playing ? "Pause" : "Play"}><PlayIcon playing={playing} /></button>
+        <input type="range" min={0} max={dur || 1} step={0.01} value={t} style={{ ["--p" as string]: `${dur ? (t / dur) * 100 : 0}%` }}
+          onChange={(e) => { const el = v.current; if (el) { el.currentTime = +e.target.value; setT(+e.target.value); } }} />
+        <span>{fmt(t)} / {fmt(dur)}</span>
+      </div>
+    </div>
   );
 }

@@ -3,6 +3,7 @@ import type { Project } from "@moshion/engine";
 import { activeBackground, backgroundCSS, newProject, sampleProject } from "@moshion/engine";
 import { useStore } from "./store";
 import { Icon } from "./Icon";
+import { pickExportFolder, shouldAskExportFolder, skipExportFolder } from "./exportfolder";
 import { LibEntry, backupAll, bringInOldProjects, listProjects, openInEditor, putProject, removeProject, syncWithDisk } from "./library";
 import { chooseFolder, defaultAppFolder, isDesktopApp, oldFolderProjects, pickAppFolder, reconnect, setAppFolder, useDisk } from "./disk";
 import { AnimatePresence, motion } from "motion/react";
@@ -107,6 +108,28 @@ function FolderSetup({ onDone }: { onDone: () => void }) {
   );
 }
 
+/** The Android app, first start: where exported videos go (Android's own folder picker; asked once). */
+function ExportFolderAsk({ onDone }: { onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const pick = async () => {
+    setBusy(true);
+    const f = await pickExportFolder();
+    setBusy(false);
+    if (f) { useStore.getState().toast(`Exports will be saved to ${f}`); onDone(); }
+  };
+  return (
+    <motion.div className="xback" {...anim.fade}>
+      <motion.div className="xbox fsetup" {...anim.sheet} role="dialog" aria-label="Where to save exports">
+        <div className="xhead"><b>Where should your exported videos go?</b></div>
+        <button className="fsopt rec" disabled={busy} onClick={pick}>
+          <Icon name="folder" /><span><b>Choose a folder</b><small>For example Movies or DCIM</small></span>
+        </button>
+        <button className="hlink" style={{ alignSelf: "center" }} onClick={() => { skipExportFolder(); onDone(); }}>Later</button>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 export function Home() {
   const current = useStore((s) => s.project);
   const [list, setList] = useState<LibEntry[] | null>(null);
@@ -119,6 +142,7 @@ export function Home() {
   const refresh = () => listProjects().then(setList);
   useEffect(() => { refresh(); const t = setTimeout(refresh, 700); return () => clearTimeout(t); }, []);
   const disk = useDisk();
+  const [askExport, setAskExport] = useState(() => shouldAskExportFolder());
   // whenever the project folder becomes available, pull in its projects
   useEffect(() => { if (disk.kind === "app" || disk.kind === "folder") syncWithDisk().then(refresh).catch(() => {}); }, [disk.kind]);
 
@@ -148,6 +172,7 @@ export function Home() {
   return (
     <div className="home">
       <AnimatePresence>{disk.kind === "choose" && <FolderSetup onDone={refresh} />}</AnimatePresence>
+      <AnimatePresence>{askExport && disk.kind !== "choose" && <ExportFolderAsk onDone={() => setAskExport(false)} />}</AnimatePresence>
       <div className="hwrap">
         <header className="htop">
           <span className="hbrand"><Mark /><b className="hlogo">inertia</b></span>
