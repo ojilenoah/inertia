@@ -595,8 +595,8 @@ export function Timeline() {
         </motion.div>
       )}</AnimatePresence>
       <div className="tlbar">
-        {/* phones: start / play / next sit in the exact middle; the tools to their left; loop, split, snapping,
-            the graph and the tick size to their right */}
+        {/* phones: start / play / next sit in the exact middle, three buttons each side: Blade, Ripple and Split
+            (the cutting tools) to their left; loop, snapping and the graph to their right */}
         {phone ? (<>
         <div className="tlside left">
           <div className="seg sm" role="group" aria-label="Timeline tool">
@@ -605,11 +605,11 @@ export function Timeline() {
               <button key={id} className={ui.tool === id ? "on" : ""} title={tip} onClick={() => setUI({ tool: phone && ui.tool === id ? "select" : id })}><Icon name={ic} /></button>
             ))}
           </div>
+          <button className="ib" title="Split at playhead (S)" onClick={() => splitSelected()}><Icon name="scissors" /></button>
         </div>
         <div className="tlplay"><Transport /></div>
         <div className="tlside right">
           <LoopButton />
-          <button className="ib" title="Split at playhead (S)" onClick={() => splitSelected()}><Icon name="scissors" /></button>
           <button className={"ib" + (ui.snap ? " on" : "")} title="Snapping (N)" onClick={() => setUI({ snap: !ui.snap })}><Icon name="magnet" /></button>
           <button className={"ib" + (ui.graph ? " on" : "")} title="Keyframe graph under the selected item (C)" onClick={() => setUI({ graph: !ui.graph })}><Icon name="curve" /></button>
           <span className="zunit" title="Time between the ruler's small ticks">{tickLabel}</span>
