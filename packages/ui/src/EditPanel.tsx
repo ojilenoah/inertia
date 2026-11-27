@@ -892,6 +892,23 @@ export function EditPanel() {
     const mo = document.querySelector(".mo")?.getBoundingClientRect() ?? { left: 0, width: innerWidth, bottom: innerHeight };
     x = mo.left + 4; cardW = mo.width - 8; y = Math.round(vb + 4); maxH = Math.max(160, mo.bottom - y - 4); above = false;
   }
+  // phones: a card is never a sliver: full width, at least ~45% of the screen tall, and its bottom edge rests just
+  // above what it was opened from (the item's bar, its clip, or the background clip)
+  let minH = 0;
+  if (stacked && !drag && !atMenu && panel) {
+    const mo = document.querySelector(".mo")?.getBoundingClientRect() ?? { left: 0, top: 0, width: innerWidth, height: innerHeight };
+    // the background's card: on the background clip itself (the little bar it was opened from closes)
+    const from = panel.section === "scene" ? document.querySelector(".cvseg")?.getBoundingClientRect().top
+      : atBar && panel.anchor ? panel.anchor.top
+      : (panel.itemId ? document.querySelector(`.clip[data-item="${panel.itemId}"]`) : null)?.getBoundingClientRect().top;
+    if (from != null && from - mo.top > 200) {
+      above = true;
+      maxH = Math.round(from - 6 - (mo.top + 6));
+      minH = Math.min(maxH, Math.round(mo.height * 0.45));
+      y = Math.round(from - 6 - Math.max(minH, Math.min(h, maxH)));
+      x = mo.left + 4; cardW = mo.width - 8;
+    }
+  }
   const show = !!panel && (panel.section === "scene" || !!item || !!group);
 
   // helpers bound to the current target
@@ -1486,7 +1503,7 @@ export function EditPanel() {
     <AnimatePresence>
       {show && (
         <motion.div
-          ref={ref} className={"pop epanel" + (sheet ? " sheet" : "")} role="dialog" aria-label={titles[panel!.section]} style={{ left: x, top: y, width: cardW, maxHeight: maxH, overflowY: "auto" }}
+          ref={ref} className={"pop epanel" + (sheet ? " sheet" : "")} role="dialog" aria-label={titles[panel!.section]} style={{ left: x, top: y, width: cardW, maxHeight: maxH, minHeight: minH || undefined, overflowY: "auto" }}
           initial={{ opacity: 0, y: above ? 6 : -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, transition: { duration: 0.1 } }}
           transition={{ type: "spring", stiffness: 500, damping: 36 }}
         >
