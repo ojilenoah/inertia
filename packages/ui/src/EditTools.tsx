@@ -445,7 +445,6 @@ export function EditModal() {
             {row("Rotation", [["rx", "X"], ["ry", "Y"], ["rz", "Z"]], 0.5, deg)}
             {row("Scale", [["scale", "%"]], 0.005, (v) => String(Math.round(v * 100)), (n) => n / 100)}
             {row("Opacity", [["opacity", "%"]], 0.005, (v) => String(Math.round(v * 100)), (n) => Math.min(Math.max(n / 100, 0), 1))}
-            <p className="hint">Values change at the playhead; animated properties get a keyframe there.</p>
           </div>
         </motion.div>
       )}

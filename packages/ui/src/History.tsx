@@ -89,7 +89,7 @@ export function HistoryButton() {
                 onClick={() => { s.checkpoint(); useStore.setState({ project: v.project }); s.toast(`Back to the version from ${ago(v.at)}`); setOpen(false); }}>
                 {new Date(v.at).toLocaleTimeString()}<span>{ago(v.at)}</span>
               </button>
-            )) : <p className="hint">A version is kept every few minutes while you work (the last 10).</p>}
+            )) : null}
           </div>
         </motion.div>
       )}</AnimatePresence>

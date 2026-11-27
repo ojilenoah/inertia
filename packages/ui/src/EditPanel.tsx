@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import type { Background, InOutKind, Item, ItemAnim, LoopKind, Prop, SceneEffectKind, TextAnimKind, TextLoopKind, TextUnit } from "@moshion/engine";
-import { itemsInGroup, baseColorAt, bgStateAt, setBaseColor, setBgState, itemState, addCanvasKey, amountAt, fxAmountAt, onKeyframe, removeCanvasKey, setCanvasFxAmount, setFxAmount, setLookAmount } from "@moshion/engine";
+import { itemsInGroup, baseColorAt, bgStateAt, setBaseColor, setBgState, itemState, amountAt, fxAmountAt, onKeyframe, setCanvasFxAmount, setFxAmount, setLookAmount } from "@moshion/engine";
 import { askConfirm } from "./Confirm";
 import { ITEM_FX, colorAt, itemFxOpt, numAt, rangeColorAt, setColor, setNum, setRangeColor } from "@moshion/engine";
 import type { ItemFx } from "@moshion/engine";
@@ -306,7 +306,6 @@ function ItemFxSection({ item, canvas }: { item?: Item; canvas?: boolean }) {
             </div>
             <Row label={f.keys?.length ? "Amount here" : "Amount"}><Slider value={item && !canvas ? fxAmountAt(f, st().t - item.start) : canvas ? amountAt(f, st().t) : f.amount} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`}
               onChange={(v) => { if (canvas) { edit((d) => setCanvasFxAmount(d, f.id, st().t, v), false); return; } if (!item) { upd((g) => { g.amount = v; }); return; } edit((d) => { const it = d.items.find((q) => q.id === item.id); if (it) setFxAmount(it, f.id, st().t, v); }, false); }} /></Row>
-            {f.keys?.length ? <p className="hint" style={{ margin: "0 0 4px" }}>Follows keyframes: set the amount at each keyframe.</p> : null}
             {info.opts.map((o) => (
               <Row key={o.key} label={o.label}>
                 {o.color
@@ -347,7 +346,6 @@ function LetterColors({ item, local }: { item: Item; local: number }) {
           <button className="chip" title="Remove" onClick={() => edit((d) => { const it = d.items.find((q) => q.id === item.id); if (!it?.textRanges) return; it.textRanges = it.textRanges.filter((q) => q.id !== rg.id); if (!it.textRanges.length) delete it.textRanges; })}>×</button>
         </div>
       ))}
-      {ranges.length > 0 && <p className="hint">With keyframes, change a letter colour at another keyframe and it fades between them.</p>}
     </>
   );
 }
@@ -412,7 +410,6 @@ function GroupMask({ groupId }: { groupId: string }) {
         <Row label="Keep"><Seg value={m.invert ? "out" : "in"} options={[["in", "Inside"], ["out", "Outside"]]} onChange={(v) => set((_, tr) => { tr.mask = { ...tr.mask!, invert: v === "out" }; })} /></Row>
         <Row label="Moving the mask"><Seg value={m.free ? "free" : "along"} options={[["along", "Takes the group along", "Drag the mask on the canvas and the group's items move with it"], ["free", "Leaves it put", "The mask moves over the group, revealing other parts of it"]]} onChange={(v) => set((_, tr) => { tr.mask = { ...tr.mask!, free: v === "free" || undefined }; })} /></Row>
         <Row label="The mask"><Seg value={m.inside ? "show" : "hide"} options={[["show", "Shown"], ["hide", "Hidden"]]} onChange={(v) => set((_, tr) => { tr.mask = { ...tr.mask!, inside: v === "show" || undefined }; })} /></Row>
-        <p className="hint">Every item in the group is cut by it. An item with its own mask keeps that one instead.</p>
       </>}
     </>
   );
@@ -441,7 +438,6 @@ function ParentAndLinks({ item }: { item: Item }) {
           {parents.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
         </select>
       </Row>
-      {item.parentLink && <p className="hint">Moves, turns and grows with its parent from here on, keeping its own animation.</p>}
       <div className="psub">Links</div>
       {(item.links ?? []).map((L, i) => (
         <div key={i} className="plink">
@@ -457,7 +453,6 @@ function ParentAndLinks({ item }: { item: Item }) {
         </div>
       ))}
       <button className="chip" onClick={() => setI((it) => { (it.links ??= []).push({ prop: "rz", src: "self", srcProp: "x", amount: 0.5 }); })}>+ Link a property</button>
-      <p className="hint">Example: Turn follows its own Left/right × 0.5 makes a wheel roll as it moves.</p>
     </>
   );
 }
@@ -597,9 +592,6 @@ function RunAlong({ item }: { item: Item }) {
             <Row label="Far side"><Seg value={pt.far ?? "show"} options={[["show", "Show"], ["fade", "Fade"], ["hide", "Hide"]]} onChange={(v) => setP((p) => { p.far = v as "show"; })} /></Row>
           )}
         </>}
-        <p className="hint">{target && target.kind !== "motion"
-          ? `${target.name} is now its parent: this moves, turns and grows with it. Turn hinges it round the edge (0° lies flat in the surface, 90° stands up off it). Along, Turn and Gap change at keyframes.`
-          : "Along and Turn change at keyframes: set Along at two keyframes to slide it along the path."}</p>
       </>}
     </>
   );
@@ -640,7 +632,6 @@ function MaskAndRepeat({ item, only }: { item: Item; only?: "mask" }) {
           <option value="bottom">Its bottom edge</option>
         </select>
       </Row>}
-      {item.mask?.edge && item.mask.edge !== "shape" && <p className="hint">The cut follows that side of the other item's real outline (a circle cuts along its curve). This item shows on the other side and through the near half of the shape, and is hidden past that edge — like coming out of a hole.</p>}
       {/* a hollow shape: which of its edges does the cutting */}
       {item.mask && (() => { const by = project.items.find((q) => q.id === item.mask!.by); return by && numAt(by, "hollow", Math.max(0, st().t - by.start)) > 0.5; })() && (
         item.mask.edge && item.mask.edge !== "shape"
@@ -652,7 +643,6 @@ function MaskAndRepeat({ item, only }: { item: Item; only?: "mask" }) {
         onChange={(v) => setI((it) => { it.mask = { ...it.mask!, invert: v === "out", through: v === "through" || undefined }; })} /></Row>}
       {item.mask && <Row label="Moving the mask"><Seg value={item.mask.free ? "free" : "along"} options={[["along", "Takes this along", "Drag the mask on the canvas and this item moves with it, keeping its place inside"], ["free", "Leaves this put", "The mask moves over this item, revealing other parts of it"]]} onChange={(v) => setI((it) => { it.mask = { ...it.mask!, free: v === "free" || undefined }; })} /></Row>}
       {item.mask && <Row label="The shape"><Seg value={item.mask.inside ? "show" : "hide"} options={[["show", "Shown"], ["hide", "Hidden"]]} onChange={(v) => setI((it) => { it.mask = { ...it.mask!, inside: v === "show" || undefined }; })} /></Row>}
-      {item.mask && <p className="hint">{item.mask.inside ? "The shape shows too. Layers work as usual: put this item above the shape to see it on top." : "The shape itself is hidden; move or animate it to reveal this item."}</p>}
       <UseAsMask item={item} />
       {canRide(item) && <RunAlong item={item} />}
       </>}
@@ -946,7 +936,6 @@ export function EditPanel() {
         <div className={ps.length > 1 ? "f3" : ""}>{ps.map(([p, l]) => <Num key={p} label={l} value={G(p).get()} step={step} fmt={fmt} parse={parse} onChange={(v) => G(p).set(v)} />)}</div>;
       return (
         <>
-          <p className="hint">Offsets for the whole group, keyed at the playhead. They add on top of each item's own animation.</p>
           <Row label="Position">{gnums([["x", "X"], ["y", "Y"], ["z", "Z"]], 1)}</Row>
           <Row label="Rotation">{gnums([["rx", "X"], ["ry", "Y"], ["rz", "Z"]], 0.5, deg)}</Row>
           <Row label="Scale">{gnums([["scale", "%"]], 0.005, pct, (n) => n / 100)}</Row>
@@ -1034,7 +1023,6 @@ export function EditPanel() {
                 </button>
               ))}
             </div>
-            <p className="hint">{item.textKeys && item.textKeys.length > 1 ? "How the wording changes between this text's keyframes." : "Type different text at two keyframes and it changes from one to the other this way."}</p>
             </>}
             {animTab === "in" && pick("in")}
             {animTab === "out" && pick("out")}
@@ -1062,7 +1050,6 @@ export function EditPanel() {
               <Row label="Amount"><Slider value={A.loop.amount} min={0} max={2} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => setA((a) => { a.loop = { ...a.loop!, amount: v }; }, false)} /></Row>
             </>}
             </>}
-            <p className="hint">Drag the IN / OUT parts on the clip to move them, or their inner edge to change the length. Presets play on top of keyframes.</p>
           </>
         );
       }
@@ -1092,8 +1079,6 @@ export function EditPanel() {
             {info.params.includes("round") && <Row label="Roundness"><Slider value={spec.round ?? 0} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => setS((s) => { s.round = v; }, false)} /></Row>}
             {info.params.includes("seed") && <Row label="Variation"><Slider value={spec.seed ?? 1} min={1} max={60} step={1} fmt={(v) => `#${Math.round(v)}`} onChange={(v) => setS((s) => { s.seed = Math.round(v); }, false)} /></Row>}
             <Row label="Hollow"><Slider value={numAt(item, "hollow", t - item.start)} min={0} max={Math.round(Math.min(item.w, item.h) / 2)} fmt={(v) => (v ? `${Math.round(v)}px rim` : "Solid")} onChange={(v) => setF((it) => { setNum(it, "hollow", st().t, Math.round(v)); }, false)} /></Row>
-            {numAt(item, "hollow", t - item.start) > 0 && <p className="hint">The middle is cut out: a rim this thick is left, with a hole of the same shape. It can change at keyframes.</p>}
-            <p className="hint">With keyframes, pick a different shape (or settings) at another keyframe and it morphs between them. Colour and border are in Fill & border.</p>
           </>
         );
       }
@@ -1109,11 +1094,9 @@ export function EditPanel() {
             <Row label="Arrows"><Seg value={l.arrow} options={[["none", "None"], ["end", "→"], ["start", "←"], ["both", "↔"]]} onChange={(v) => setL((x) => { x.arrow = v as LineSpec["arrow"]; })} /></Row>
             <Row label="Ends"><Seg value={l.cap} options={[["round", "Round"], ["butt", "Flat"]]} onChange={(v) => setL((x) => { x.cap = v as LineSpec["cap"]; })} /></Row>
             <Row label="Corners"><Slider value={l.round ?? 0} min={0} max={300} step={1} fmt={(v) => (v ? `${Math.round(v)}px` : "Sharp")} onChange={(v) => setL((x) => { x.round = v || undefined; }, false)} /></Row>
-            {l.pts.length < 3 && <p className="hint">Corners round where the line bends: add points first (double-click the line, or the + at an end).</p>}
             <div className="psub">Draw on</div>
             <Row label="End"><Slider value={draw} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => setF((it) => { setLook(it, "draw", st().t, v); }, false)} /></Row>
             <Row label="Start"><Slider value={lookAt(item, t - item.start).drawStart} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => setF((it) => { setLook(it, "drawStart", st().t, v); }, false)} /></Row>
-            <p className="hint">Keyframe End from 0% to 100% and the line draws itself. Keyframe Start too and a piece of line travels along it.</p>
           </>
         );
       }
@@ -1124,7 +1107,6 @@ export function EditPanel() {
           const drawn = blocks.filter(([a, b]) => strokeFor(item, a, b)).length;
           return (
             <>
-              <p className="hint">This clip is invisible. Its keyframes split it into blocks; draw a line for each block and anything linked to it travels along the lines. Add keyframes (◆+) for more blocks.</p>
               <Row label="Blocks"><span className="mono">{drawn} of {blocks.length} drawn</span></Row>
               <div className="chips" style={{ marginTop: 4 }}>
                 <button className="chip on" onClick={() => { startPathDraw(item.id); setUI({ panel: null }); }}>✎ Draw path</button>
@@ -1165,8 +1147,6 @@ export function EditPanel() {
               <Row label="Place"><Seg value={f.mode} options={[["exact", "Where drawn"], ["relative", "From the object"]]} onChange={(v) => setF((it) => { it.follow = { ...it.follow!, mode: v as "exact" | "relative" }; })} /></Row>
               {item.kind === "text" && <Row label="Text"><Seg value={f.letters === false ? "block" : "letters"} options={[["letters", "Bends along the path"], ["block", "Moves as one block"]]} onChange={(v) => setF((it) => { it.follow = { ...it.follow!, letters: v === "letters" }; })} /></Row>}
               <Row label="Face direction"><Seg value={f.orient ? "on" : "off"} options={[["off", "No"], ["on", "Turn along path"]]} onChange={(v) => setF((it) => { it.follow = { ...it.follow!, orient: v === "on" }; })} /></Row>
-              {item.kind === "text" && f.letters !== false && <p className="hint">Each letter follows the one in front along the route, so the words curve with it. Offset (Text › Along a path) slides them along.</p>}
-              <p className="hint">“Where drawn” puts it exactly on the line. “From the object” keeps the line's shape but starts from where the object is.</p>
             </>}
           </>
         );
@@ -1266,9 +1246,7 @@ export function EditPanel() {
               </span></Row>
             </>}
             {(item.textFx?.kind === "count" || item.textFx?.kind === "scramble") && <Row label="Takes"><Slider value={item.textFx.dur ?? (item.textFx.kind === "scramble" ? Math.min(1.2, item.end - item.start) : item.end - item.start)} min={0.1} max={Math.max(0.2, item.end - item.start)} step={0.05} fmt={(v) => `${v.toFixed(2)}s`} onChange={(v) => setF((it) => { it.textFx = { ...it.textFx!, dur: v }; }, false)} /></Row>}
-            {item.textFx?.kind === "cursor" && <p className="hint">A blinking bar after the text. Pair it with the Typewriter "In" animation.</p>}
             </>}
-            <p className="hint" style={{ marginTop: 8 }}>Shadow, glow and depth are in Effects. Running text along a path is in Mask.</p>
           </>
         );
       }
@@ -1292,12 +1270,10 @@ export function EditPanel() {
             {/* shapes have it in the Shape card; pictures, videos and glass keep it here */}
             {["image", "video", "glass"].includes(item.kind) && <>
               <Row label="Hollow"><Slider value={numAt(item, "hollow", t - item.start)} min={0} max={Math.round(Math.min(item.w, item.h) / 2)} fmt={(v) => (v ? `${Math.round(v)}px rim` : "Solid")} onChange={(v) => setF((it) => { setNum(it, "hollow", st().t, Math.round(v)); }, false)} /></Row>
-              {numAt(item, "hollow", t - item.start) > 0 && <p className="hint">The middle is cut out: what's left is a rim this thick, and the hole has the same shape (rounded corners stay rounded). It can change at keyframes.</p>}
             </>}
             {(item.kind === "rect" || item.kind === "image") && <Row label="Corners"><Slider value={Math.min(item.radius ?? 0, Math.min(item.w, item.h) / 2)} min={0} max={Math.round(Math.min(item.w, item.h) / 2)} onChange={(v) => setF((it) => { it.radius = v; }, false)} /></Row>}
             <div className="psub">Border</div>
             {!!item.stroke?.width && <Row label="Draw"><Slider value={lookAt(item, t - item.start).draw ?? 1} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => setF((it) => { setLook(it, "draw", st().t, v); }, false)} /></Row>}
-            {!!item.stroke?.width && <p className="hint">Keyframe Draw from 0% to 100% and the border draws itself on.</p>}
             <Row label="Width"><Slider value={item.stroke?.width ?? 0} min={0} max={40} onChange={(v) => setF((it) => { it.stroke = { width: v, color: it.stroke?.color ?? "#111111" }; }, false)} /></Row>
             {!!item.stroke?.width && <Row label="Colour"><Color value={item.stroke.color} onChange={(c) => setF((it) => { it.stroke = { width: it.stroke?.width ?? 2, color: c ?? "#111111" }; }, false)} /></Row>}
           </>
@@ -1313,7 +1289,6 @@ export function EditPanel() {
             {posTab === "pos" && <>
             {item?.kind !== "motion" && <Row label="Position" kf={kf(["x", "y", "z"])}>{nums([["x", "X"], ["y", "Y"], ["z", "Z"]], 1)}</Row>}
             <Row label="Scale" kf={kf(["scale"])}>{nums([["scale", "%"]], 0.005, pct, (n) => n / 100)}</Row>
-            {item?.kind === "motion" && <p className="hint">The path grows and shrinks around the middle of its nodes. Move it by Ctrl-dragging it on the canvas.</p>}
             {item?.kind !== "motion" && <Row label="Size"><div className="f2">
               <Num label="W" value={item.w} onChange={(v) => setF((it) => { const w = Math.max(1, Math.round(v)); if (it.lockRatio) it.h = Math.max(1, Math.round((it.h * w) / it.w)); it.w = w; }, false)} />
               <Num label="H" value={item.h} onChange={(v) => setF((it) => { const h = Math.max(1, Math.round(v)); if (it.lockRatio) it.w = Math.max(1, Math.round((it.w * h) / it.h)); it.h = h; }, false)} />
@@ -1338,14 +1313,12 @@ export function EditPanel() {
                   <button className={"chip" + (pinned ? " on" : "")} onClick={() => setUI(pinned ? { pinning: null } : { pinning: item.id, mode3d: false, panel: null })}>{pinned ? "Done on canvas" : "Drag the corners on the canvas"}</button>
                   {isPinned(item) && <button className="chip" onClick={() => setF((it) => { clearPin(it); })}>Reset</button>}
                 </div>
-                <p className="hint">How far each corner has moved (px). With keyframes, the corners animate.</p>
               </>;
             })()}
             {posTab === "3d" && <>
             {/* the same gimbal as on the canvas: drag the ball to tumble, the ring to spin, click an axis to face it */}
             {(item || group) && <RotationGimbal inline itemId={item ? item.id : null} trackId={group?.id} s={item ? itemState(project, item, t) : groupValues(group!, t)} onExit={() => {}} />}
             <Row label="Rotation" kf={kf(["rx", "ry", "rz"])}>{nums([["rx", "X"], ["ry", "Y"], ["rz", "Z"]], 0.5, deg)}</Row>
-            <p className="hint">Images and shapes show a white back when they turn around.</p>
             <div className="chips">
               <button className="chip" onClick={() => { st().checkpoint(); P("rx").set(0); P("ry").set(0); P("rz").set(0); }}>Reset</button>
               <button className={"chip" + (st().ui.mode3d ? " on" : "")} onClick={() => setUI({ mode3d: !st().ui.mode3d })}>3D gimbal {st().ui.mode3d ? "on" : "off"}</button>
@@ -1368,7 +1341,6 @@ export function EditPanel() {
             {item.kind === "glass" && <Row label="Glass blur"><Slider value={item.effect?.blur ?? 1.5} min={0} max={20} step={0.5} onChange={(v) => setF((it) => { it.effect = { kind: "liquid-glass", magnify: it.effect?.magnify ?? 1.35, blur: v }; }, false)} /></Row>}
             <LookOptions item={item} L={L} />
             {item.kind === "text" && <TextShadowOpts item={item} />}
-            <p className="hint">Shadow, blur and glow flatten 3D rotation on this item.</p>
             <ItemFxSection item={item} />
             </>}
             {fxTab === "blend" && <>
@@ -1400,7 +1372,6 @@ export function EditPanel() {
               <button className="chip" onClick={() => { edit((d) => { const it = d.items.find((q) => q.id === id)!; (["x", "y", "rz", "scale", "opacity"] as Prop[]).forEach((p) => addKey(it, p, st().t - it.start)); }); toast("Keys set at the playhead"); }}>Key all here</button>
               <button className="chip" onClick={() => { edit((d) => { const it = d.items.find((q) => q.id === id)!; for (const p of Object.keys(it.keys) as Prop[]) { it.base[p] = ownValue(it, p, st().t); delete it.keys[p]; } }); toast("Keyframes cleared"); }}>Clear all</button>
             </div>
-            <p className="hint">To change how a stretch between two keyframes moves, open the graph, click that section of the curve, then use Ease ▾ at its top right.</p>
           </>
         );
       case "chart": {
@@ -1442,7 +1413,6 @@ export function EditPanel() {
                 {q.colors.length < 8 && <button className="gcol add" onClick={() => setF((it) => { it.particles = { ...it.particles!, colors: [...it.particles!.colors, SW[it.particles!.colors.length % SW.length]] }; })}><Icon name="plus" size={11} /></button>}
               </div>
             </Row>
-            <p className="hint">Confetti and sparks burst from the middle of the box; snow and dust fill it. Resize the box to set the area.</p>
           </>
         );
       }
@@ -1473,7 +1443,6 @@ export function EditPanel() {
               }}>Find beats</button>
               <button className="chip" onClick={() => edit((d) => { d.markers = (d.markers ?? []).filter((m) => m.label !== "beat"); })}>Clear beats</button>
             </div>
-            <p className="hint">Volume can change at keyframes. With "Dip when others play", music gets quieter while a voice or other sound plays.</p>
           </>
         );
       }
@@ -1502,7 +1471,6 @@ export function EditPanel() {
         if (!g) return <p className="hint">This item isn't in a group.</p>;
         return (
           <>
-            <p className="hint">In <b>{g.name}</b>. To animate the whole group, right-click its name on the timeline.</p>
             <div className="chips">
               <button className="chip" onClick={() => edit((d) => { const tid = addTrack(d, "video"); d.items.find((q) => q.id === id)!.trackId = tid; })}>Take out of group</button>
               <button className="chip" onClick={() => edit((d) => ungroupTrack(d, g.id))}>Ungroup all</button>
@@ -1630,7 +1598,6 @@ function PlaceInside({ item }: { item: Item }) {
       {inside.map((i) => (
         <div key={i.id} className="pinrow"><span>{i.name}</span><button className="chip" onClick={() => takeOut(i.id)} title="Stop masking it with this shape">Unmask</button></div>
       ))}
-      {item.fill.startsWith("url(") && <p className="hint">This shape is filled with a picture; the controls below adjust it.</p>}
     </>
   );
 }
@@ -1673,6 +1640,7 @@ function SceneBody({ bgId }: { bgId?: string }) {
   const setLook = (fn: (b: { colors: string[]; angle: number; speed: number }) => void, commit = true) => edit((d) => { if (bg) setBgState(d, bg.id, st().t, fn); }, commit);
   const keyed = !!(project.canvasKeys ?? []).length;
   const bgNow = bg ? { ...bg, ...bgStateAt(bg, t) } : undefined;
+  const [tab, setTab] = useState<"bg" | "canvas" | "fx" | "looks">("bg");
   const applyPreset = (pr: (typeof BG_PRESETS)[number]) => edit((d) => {
     const look = { name: pr.name, kind: pr.kind, colors: [...pr.colors], angle: pr.angle ?? 0, speed: pr.speed ?? (pr.kind === "solid" ? 0 : 1) };
     const b = d.backgrounds?.find((q) => q.id === bg?.id);
@@ -1681,14 +1649,11 @@ function SceneBody({ bgId }: { bgId?: string }) {
   });
   return (
     <>
-      <div className="psub" style={{ marginTop: 0 }}>Canvas</div>
-      <Row label="Keyframes">
-        <span style={{ display: "flex", gap: 4 }}>
-          <button className="chip" title="Add a canvas keyframe" onClick={() => edit((d) => addCanvasKey(d, st().t))}>◆+ Here</button>
-          {(project.canvasKeys ?? []).some((k) => Math.abs(k - t) <= 0.02) && <button className="chip" onClick={() => edit((d) => removeCanvasKey(d, st().t))}>◆− Here</button>}
-          <span className="hint" style={{ margin: 0 }}>{(project.canvasKeys ?? []).length} keyframe{(project.canvasKeys ?? []).length === 1 ? "" : "s"}</span>
-        </span>
-      </Row>
+      <div className="atabs2" role="tablist">
+        {([["bg", "Background"], ["canvas", "Canvas"], ["fx", "Effects"], ["looks", "Looks"]] as const).map(([k, l]) =>
+          <button key={k} role="tab" className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{l}</button>)}
+      </div>
+      {tab === "canvas" && <>
       <Row label="Size">
         <span className="hsize" style={{ gap: 4 }}>
           <Num label="W" value={project.width} onChange={(v) => edit((d) => { d.width = Math.max(16, Math.round(v)); }, false)} />
@@ -1703,9 +1668,10 @@ function SceneBody({ bgId }: { bgId?: string }) {
       <Row label="Frame rate"><Seg value={String(project.fps)} options={[["24", "24"], ["30", "30"], ["60", "60"]]} onChange={(v) => edit((d) => { d.fps = +v; })} /></Row>
       <Row label="Length"><LengthControl /></Row>
       <Row label="Base colour"><Color value={baseColorAt(project, t)} onChange={(c) => c && edit((d) => { setBaseColor(d, st().t, c); }, false)} /></Row>
-      {keyed && <p className="hint">Canvas keyframes are on: colours, angle, movement, base colour and look amounts change from the keyframe at the playhead and blend between keyframes.</p>}
-      <ItemFxSection canvas />
-      <div className="psub">Background {bg ? `· ${fmtClock(bg.start)} – ${fmtClock(bg.end)}` : ""}</div>
+      </>}
+      {tab === "fx" && <ItemFxSection canvas />}
+      {tab === "bg" && <>
+      {bg && bgs.length > 1 && <div className="psub" style={{ marginTop: 0 }}>{fmtClock(bg.start)} – {fmtClock(bg.end)}</div>}
       <div className="bgpresets">
         {BG_PRESETS.map((pr) => {
           const css = backgroundCSS({ id: "", start: 0, end: 1, angle: pr.angle ?? 0, speed: pr.speed ?? 1, ...pr }, 0.8);
@@ -1760,10 +1726,9 @@ function SceneBody({ bgId }: { bgId?: string }) {
           {bgs.length > 1 && <button className="chip danger" onClick={() => { edit((d) => { d.backgrounds = d.backgrounds?.filter((b) => b.id !== bg.id); }); }}>Delete this part</button>}
         </div>
       </>}
+      </>}
 
-      <div className="psub">Screen looks</div>
-      <p className="hint">Looks apply to the selected canvas part (Blade splits the canvas). With canvas keyframes, amounts change between them.</p>
-      {(Object.keys(SCENE_EFFECTS) as SceneEffectKind[]).map((k) => {
+      {tab === "looks" && (Object.keys(SCENE_EFFECTS) as SceneEffectKind[]).map((k) => {
         const part = bgId ? bgs.find((q) => q.id === bgId) : undefined;
         const f = project.effects.find((e) => e.kind === k && (!part || (e.start < part.end - 0.01 && e.end > part.start + 0.01)));
         return (

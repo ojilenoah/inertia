@@ -66,7 +66,6 @@ export function PinEditor({ item, s, k, edit }: { item: Item; s: ItemState; k: n
         <path d={d} className={"pinquad" + (edit ? " on" : "")} strokeWidth={1.5 * u} />
         {edit && quad.map(([x, y], i) => (
           <g key={i} className="pincorner" onPointerDown={(e) => down(e, i)} onContextMenu={(e) => resetCorner(e, i)} data-nolongpress={undefined}>
-            <title>Drag · hold to reset</title>
             <circle cx={x} cy={y} r={16 * u} className="pinhit" />
             <circle cx={x} cy={y} r={7 * u} strokeWidth={2 * u} />
           </g>

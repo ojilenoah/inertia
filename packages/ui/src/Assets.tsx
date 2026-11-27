@@ -117,7 +117,6 @@ function BrandKit() {
         ))}
         <label className="gcol add" title="Add a colour"><input type="color" value={pick} onChange={(e) => setPick(e.target.value)} onBlur={(e) => setBrand((x) => { if (!x.colors.includes(e.target.value)) x.colors.push(e.target.value); })} /><Icon name="plus" size={11} /></label>
       </div>
-      <p className="hint">Brand colours show first in every colour picker. The first two are used by Scenes.</p>
       <div className="psub">Fonts</div>
       <div className="bfonts">
         {FONTS.map((f) => (

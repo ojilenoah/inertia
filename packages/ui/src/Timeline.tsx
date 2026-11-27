@@ -46,9 +46,10 @@ let ROW_H = 32, CLIP_PAD = 4;
 /** Phones: thin rows that keep the same size on screen whatever the interface size. */
 function setRowSize(phone: boolean, uiScale: number) {
   const k = Math.min(1, Math.max(0.5, uiScale || 1));
-  // phones use the normal row size (the interface size setting scales everything); kept the same on screen at any setting
-  ROW_H = phone ? Math.round(32 / k) : 32;
-  CLIP_PAD = phone ? Math.round(4 / k) : 4;
+  // phones: rows only a little taller than their clips (no lines between them), so more tracks fit; the same size
+  // on screen at any interface size
+  ROW_H = phone ? Math.round(28 / k) : 32;
+  CLIP_PAD = phone ? Math.round(1.5 / k) : 4;
 }
 
 /** Normal and group tracks, then audio tracks, then the canvas track at the very bottom. */
@@ -1194,7 +1195,6 @@ function TransPicker({ id, x, y, close }: { id: string; x: number; y: number; cl
           <b>{tr.dur.toFixed(2)}s</b>
         </div>
       </>}
-      {tr?.kind === "board" && <p className="hint" style={{ margin: "4px 0 0" }}>The camera travels between the two canvases as they're laid out on the board.</p>}
     </div>, topLayer());
 }
 
@@ -1565,7 +1565,7 @@ function GraphRow({ item, group, W, x, tOf }: { item: Item; group?: string; W: n
     return (
       <div className="lrow" style={{ height: H, background: "var(--panel)" }}>
         <div className="hint" style={{ position: "absolute", left: Math.max(10, x(item.start) + 10), top: 40, maxWidth: 520 }}>
-          {item.name} has no keyframes yet. Move the playhead, then move, scale or rotate it on the canvas: keyframes are set for you, and it will travel between them.
+          No keyframes yet
         </div>
       </div>
     );

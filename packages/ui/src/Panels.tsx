@@ -101,7 +101,6 @@ export function PhoneMenu() {
                 ))}
               </div>
             </div>
-            {!canScaleUi() && <p className="pmhint">Interface size works on phones and in the desktop app. In a desktop browser, use Ctrl − and Ctrl + instead.</p>}
             <button className="pmitem" onClick={() => setUI({ theme: ui.theme === "dark" ? "light" : "dark" })}><Icon name={ui.theme === "dark" ? "moon" : "sun"} />{ui.theme === "dark" ? "Dark" : "Light"} theme</button>
             <button className="pmitem" onClick={goHome}><Icon name="board" />All projects</button>
           </motion.div>

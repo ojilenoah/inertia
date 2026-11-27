@@ -235,7 +235,6 @@ export function ExportDialog() {
             <div className="xrow"><span>Format</span>
               <span className="gseg2">{([["mp4", "MP4 video"], ["gif", "GIF"], ["zip", "See-through PNGs"]] as const).map(([v, l]) => <button key={v} className={format === v ? "on" : ""} onClick={() => setFormat(v)}>{l}</button>)}</span>
             </div>
-            {format === "zip" && <div className="xrow"><span /><span className="hint" style={{ margin: 0 }}>Every frame as a PNG with no background, in a .zip, to lay over other video.</span></div>}
             <div className="xrow"><span>Shape</span>
               <span className="gseg2">{([["own", "As made"], ["9:16", "9:16"], ["1:1", "1:1"], ["4:5", "4:5"], ["16:9", "16:9"]] as const).map(([v, l]) => <button key={v} className={shape.aspect === v ? "on" : ""} onClick={() => setShape({ ...shape, aspect: v })}>{l}</button>)}</span>
             </div>
@@ -283,7 +282,7 @@ export function ExportDialog() {
           <>
             <div className="xdone">Saved <b>{phase.name}</b></div>
             <div className="xrow"><span>{(phase.size / 1e6).toFixed(1)} MB · took {phase.secs.toFixed(1)}s</span><span>{phase.audio ? "with sound" : "no sound"}</span></div>
-            {phase.name.endsWith(".zip") ? <p className="hint">Unzip it and use the frames as an image sequence in any editor.</p> : phase.name.endsWith(".gif") ? <img className="xprev" src={phase.url} alt="" style={{ objectFit: "contain" }} /> : <video className="xprev" src={phase.url} controls />}
+            {phase.name.endsWith(".zip") ? null : phase.name.endsWith(".gif") ? <img className="xprev" src={phase.url} alt="" style={{ objectFit: "contain" }} /> : <video className="xprev" src={phase.url} controls />}
             <a className="hcreate xgo" href={phase.url} download={phase.name}>Download again</a>
           </>
         )}

@@ -76,7 +76,6 @@ export function TrackOverlay({ item, k }: { item: Item; k: number }) {
         {pts.length === 4 && <path d={C.map((c, i) => `${i ? "L" : "M"}${c[0]} ${c[1]}`).join("") + "Z"} className="trkquad" strokeWidth={1.5 * u} />}
         {C.map((c, i) => (
           <g key={i} className={"trkpt" + (here || drag ? "" : " off")} onPointerDown={(e) => down(e, i)} style={{ pointerEvents: run ? "none" : "auto" }}>
-            <title>{here ? "Drag onto the spot to follow" : "Not tracked at this frame · drag it onto the spot here"}</title>
             <rect x={c[0] - box} y={c[1] - box} width={box * 2} height={box * 2} strokeWidth={1.5 * u} className="trkbox" />
             <circle cx={c[0]} cy={c[1]} r={18 * u} className="trkhit" />
             <path d={`M${c[0] - 7 * u} ${c[1]}H${c[0] + 7 * u}M${c[0]} ${c[1] - 7 * u}V${c[1] + 7 * u}`} strokeWidth={1.5 * u} className="trkcross" />

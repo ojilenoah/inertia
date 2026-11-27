@@ -1160,7 +1160,7 @@ label.gcol.add { cursor: pointer; }
 /* track sort: an icon per sort */
 .rulerpad .tsort { padding: 0 5px; }
 /* animate card: In / Out / Throughout tabs */
-.atabs2 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; margin: 8px 0 6px; padding: 3px; border-radius: 6px; background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.atabs2 { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 3px; margin: 8px 0 6px; padding: 3px; border-radius: 6px; background: color-mix(in srgb, var(--ink) 5%, transparent); }
 .atabs2 button { position: relative; height: 26px; border-radius: 4px; font: 600 11.5px var(--sans); color: var(--ink-2); }
 .atabs2 button:hover { color: var(--ink); }
 .atabs2 button.on { background: var(--panel); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.18); }
@@ -1287,7 +1287,10 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 /* phones: a slimmer track toolbar and a thinner time ruler (seeker) */
 /* phones: thin track rows (same size on screen at any interface size; the timeline sets --rowh / --clippad) */
 .mo.phone .cvdock, .mo.phone .cvdock .lrow.canvas { height: var(--rowh); }
-.mo.phone .cvdock .lrow.canvas .clip.cvseg { top: var(--clippad) !important; height: calc(var(--rowh) - 2 * var(--clippad)) !important; }
+/* phones: the background fills its whole bar (no pill), and the track rows have no lines between them */
+.mo.phone .cvdock .lrow.canvas .clip.cvseg { top: 0 !important; height: var(--rowh) !important; border-radius: 0; }
+.mo.phone .lanes .lrow, .mo.phone .th { border-bottom: 0; }
+.mo.phone .cvdock .lrow.canvas, .mo.phone .th.canvas { border-top: 0; }
 /* phones: the grid options open above the play bar (the bar would cut them off) */
 .mo.phone .gridpop { position: fixed; right: calc(var(--sa-r) + 8px); bottom: calc(var(--sa-b) + 46px); width: min(280px, calc(100vw - 16px)); }
 /* motion polish: buttons ease between states and give a little when pressed; views and panels fade in as they appear

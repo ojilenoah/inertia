@@ -23,7 +23,6 @@ export function TrackBody({ item }: { item: Item }) {
 
   return (
     <>
-      <p className="hint">Follow a spot through the video, then use it: make text or a sticker follow it, pin a picture onto a screen, steady the shot, or keep the subject in the middle.</p>
       <div className="chips">
         <button className="chip" onClick={() => addTracker(item.id, 1)}><Icon name="target" size={12} />Point</button>
         <button className="chip" onClick={() => addTracker(item.id, 4)}><Icon name="pin" size={12} />4 corners</button>
@@ -55,7 +54,6 @@ export function TrackBody({ item }: { item: Item }) {
             <button className="chip" onClick={() => runTracking(item.id, active.id, 1)} title="From the playhead to the clip's end">Forwards ▶</button>
           </div>
         )}
-        <p className="hint">Drag {active.n === 1 ? "the point" : "the corners"} onto something with clear detail (a corner, a mark, an edge crossing), then track. Lost it? Move the playhead there, drag it back and track again.</p>
         {active.pts.length > 1 && !run && <>
           <div className="psub">Use it</div>
           {others.length > 0 && (
