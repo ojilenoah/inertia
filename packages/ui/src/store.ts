@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type { Project, Prop } from "@moshion/engine";
-import { dropMaskParents, fitLength, fixPathPivots, upgradePaths, flattenLanes, hasLanes, normalizeProject, sampleProject, unifyTracks } from "@moshion/engine";
+import { dropEmptyTracks, dropMaskParents, fitLength, fixPathPivots, upgradePaths, flattenLanes, hasLanes, normalizeProject, sampleProject, unifyTracks } from "@moshion/engine";
 import type { TrackSort } from "@moshion/engine";
 import { loadAutosave } from "./persist";
 
@@ -182,6 +182,7 @@ function makeStore() {
         dropMaskParents(s.project); // masks aren't parents (that was tried and taken back): clear any links it made
         if (s.project.items.some((i) => i.kind === "motion" && !i.pathV2)) upgradePaths(s.project);
         fixPathPivots(s.project); // a turned / tilted / sized path keeps its turning point while its nodes are edited
+        dropEmptyTracks(s.project); // rows with nothing on them go
       });
     },
     checkpoint: () => set((s) => {

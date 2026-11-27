@@ -1290,6 +1290,7 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 /* phones: the background fills its whole bar (no pill), and the track rows have no lines between them */
 .mo.phone .cvdock .lrow.canvas .clip.cvseg { top: 0 !important; height: var(--cvh) !important; border-radius: 0; }
 .mo.phone .lanes .lrow, .mo.phone .th { border-bottom: 0; }
+.mo.phone .heads { border-right: 0; } /* no line between the track names and the tracks */
 .mo.phone .cvdock .lrow.canvas, .mo.phone .th.canvas { border-top: 0; }
 /* phones: the grid options open above the play bar (the bar would cut them off) */
 .mo.phone .gridpop { position: fixed; right: calc(var(--sa-r) + 8px); bottom: calc(var(--sa-b) + 46px); width: min(280px, calc(100vw - 16px)); }
@@ -1395,10 +1396,10 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .narrow .th .tico { margin: 0; }
 .mo.phone .narrow .th, .mo.phone .narrow .th.grp { padding: 0 2px; }
 .tlafter.tlbefore { left: 0; right: auto; border-left: 0; border-right: 1.5px solid var(--ink-3); }
-/* popups, menus, cards and the floating bar: see-through, with what's behind them softly blurred */
-body :is(.cmenu, .bmenu, .fbar, .pop, .histpop, .gridpop, .shpop, .pmenu, .cbubble) {
-  background: color-mix(in srgb, var(--panel) 68%, transparent);
-  -webkit-backdrop-filter: blur(18px) saturate(1.35); backdrop-filter: blur(18px) saturate(1.35);
+/* popups, menus, cards and the floating bars: solid (nothing shows through them) */
+body :is(.cmenu, .bmenu, .fbar, .pop, .histpop, .gridpop, .shpop, .pmenu, .cbubble, .linehint, .linepop, .rmenu, .trpick, .mkpop) {
+  background: var(--panel) !important;
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
 }
 /* the playhead's grab strip stops above the canvas row, so its transition boxes and clips stay tappable under the line */
 .phgrab { bottom: 58px; }
@@ -1565,3 +1566,8 @@ body.maskpicking .stagewrap, body.maskpicking .lanes, body.maskpicking .clip { c
 .trkuse { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
 .trkuse .psel { flex: 1; min-width: 0; }
 .chip svg.i { width: 12px; height: 12px; }
+/* phones: the bar over the tracks: its buttons spread evenly across the whole width (their groups dissolve), and
+   no tick-size readout */
+.mo.phone .tlbar { justify-content: space-evenly; gap: 0; }
+.mo.phone .tlbar :is(.tlside, .tlplay, .tlside > *, .tlplay > *):not(button) { display: contents; }
+.mo.phone .tlbar .zunit { display: none !important; }

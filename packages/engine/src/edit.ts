@@ -361,8 +361,24 @@ export function fitLength(project: Project) {
 }
 
 /** Bring a loaded project up to date (older text animations, automatic length). */
+/**
+ * Tracks with nothing on them go: a row with no items (and a group with no tracks left in it). Placing an item
+ * makes a track when it needs one. Returns whether anything was removed.
+ */
+export function dropEmptyTracks(project: Project): boolean {
+  let changed = false;
+  for (;;) {
+    const used = new Set(project.items.map((i) => i.trackId));
+    const parents = new Set(project.tracks.map((t) => t.parent).filter(Boolean));
+    const keep = project.tracks.filter((t) => used.has(t.id) || parents.has(t.id));
+    if (keep.length === project.tracks.length) return changed;
+    project.tracks = keep; changed = true;
+  }
+}
+
 export function normalizeProject(project: Project) {
   for (const it of project.items) migrateTextAnim(it);
+  dropEmptyTracks(project);
   unifyTracks(project);
   if (hasLanes(project)) flattenLanes(project);
   fitLength(project);

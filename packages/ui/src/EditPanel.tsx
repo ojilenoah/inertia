@@ -832,6 +832,14 @@ export function EditPanel() {
   const stacked = useStacked();
   const frozen = useRef<{ key: string; x: number; top: number; bottom: number; upper: boolean } | null>(null);
   useLayoutEffect(() => { const el = ref.current; if (el && Math.abs(el.scrollHeight - h) > 2) setH(el.scrollHeight); });
+  // whatever changes its size (a tab, a section opening, a picture loading): measured again, so it's placed again
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setH((v) => (Math.abs(el.scrollHeight - v) > 2 ? el.scrollHeight : v)));
+    ro.observe(el); [...el.children].forEach((c) => ro.observe(c));
+    return () => ro.disconnect();
+  });
   const fit = (v: number, size: number, max: number) => Math.min(Math.max(8, v), Math.max(8, max - size - 8));
   // an item's card sits beside the item on the canvas (never on top of it) and always fits on screen, scrolling inside if tall
   const objEl = panel?.itemId ? document.querySelector<HTMLElement>(`.world .obj[data-id="${panel.itemId}"]`) : null;
@@ -892,20 +900,17 @@ export function EditPanel() {
     const mo = document.querySelector(".mo")?.getBoundingClientRect() ?? { left: 0, width: innerWidth, bottom: innerHeight };
     x = mo.left + 4; cardW = mo.width - 8; y = Math.round(vb + 4); maxH = Math.max(160, mo.bottom - y - 4); above = false;
   }
-  // phones: a card is never a sliver: full width, at least ~45% of the screen tall, and its bottom edge rests just
-  // above what it was opened from (the item's bar, its clip, or the background clip)
-  let minH = 0;
+  // phones: a card is full width, as tall as what's in it (up to the top of the app), and its bottom edge rests just
+  // above the item's clip in its track (the background's card: on the background clip)
   if (stacked && !drag && !atMenu && panel) {
     const mo = document.querySelector(".mo")?.getBoundingClientRect() ?? { left: 0, top: 0, width: innerWidth, height: innerHeight };
-    // the background's card: on the background clip itself (the little bar it was opened from closes)
-    const from = panel.section === "scene" ? document.querySelector(".cvseg")?.getBoundingClientRect().top
-      : atBar && panel.anchor ? panel.anchor.top
-      : (panel.itemId ? document.querySelector(`.clip[data-item="${panel.itemId}"]`) : null)?.getBoundingClientRect().top;
+    // on the item's own clip in its track (the background's card: on the background clip); else on the bar it came from
+    const clipTop = (panel.section === "scene" ? document.querySelector(".cvseg") : panel.itemId ? document.querySelector(`.clip[data-item="${panel.itemId}"]`) : null)?.getBoundingClientRect().top;
+    const from = clipTop != null && clipTop > 0 ? clipTop : atBar && panel.anchor ? panel.anchor.top : undefined;
     if (from != null && from - mo.top > 200) {
       above = true;
       maxH = Math.round(from - 6 - (mo.top + 6));
-      minH = Math.min(maxH, Math.round(mo.height * 0.45));
-      y = Math.round(from - 6 - Math.max(minH, Math.min(h, maxH)));
+      y = Math.round(from - 6 - Math.min(h, maxH));
       x = mo.left + 4; cardW = mo.width - 8;
     }
   }
@@ -1503,7 +1508,7 @@ export function EditPanel() {
     <AnimatePresence>
       {show && (
         <motion.div
-          ref={ref} className={"pop epanel" + (sheet ? " sheet" : "")} role="dialog" aria-label={titles[panel!.section]} style={{ left: x, top: y, width: cardW, maxHeight: maxH, minHeight: minH || undefined, overflowY: "auto" }}
+          ref={ref} className={"pop epanel" + (sheet ? " sheet" : "")} role="dialog" aria-label={titles[panel!.section]} style={{ left: x, top: y, width: cardW, maxHeight: maxH, overflowY: "auto" }}
           initial={{ opacity: 0, y: above ? 6 : -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, transition: { duration: 0.1 } }}
           transition={{ type: "spring", stiffness: 500, damping: 36 }}
         >
