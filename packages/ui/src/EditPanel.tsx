@@ -102,7 +102,7 @@ const SECTIONS: { id: PanelSection; label: string; icon: string; when?: (it: Ite
   { id: "fill", label: "Fill & border", icon: "frame", when: (it) => !["text", "line", "chart", "particles"].includes(it.kind) },
   { id: "transform", label: "Position, size & 3D", icon: "move" },
   { id: "effects", label: "Effects, opacity & blend", icon: "sparkle" },
-  { id: "layer", label: "Layer", icon: "side" },
+  { id: "layer", label: "Layer", icon: "layers" },
   { id: "mask", label: "Mask: cut it with another item or group, or use it to cut others (text: run it along a path)", icon: "mask", when: (it) => !["audio", "motion", "camera"].includes(it.kind) },
   { id: "group", label: "Group", icon: "group", when: (_it, g) => g },
   { id: "motion", label: "Motion path", icon: "motion" },
@@ -909,8 +909,10 @@ export function EditPanel() {
     const from = clipTop != null && clipTop > 0 ? clipTop : atBar && panel.anchor ? panel.anchor.top : undefined;
     if (from != null && from - mo.top > 200) {
       above = true;
-      maxH = Math.round(from - 6 - (mo.top + 6));
-      y = Math.round(from - 6 - Math.min(h, maxH));
+      const gap = panel.section === "scene" ? 0 : 6; // the canvas card sits right on the canvas clip
+      maxH = Math.round(from - gap - (mo.top + 6));
+      const el = ref.current, edge = el ? el.getBoundingClientRect().height - el.clientHeight : 2; // its border
+      y = from - gap - Math.min(h + edge, maxH);
       x = mo.left + 4; cardW = mo.width - 8;
     }
   }

@@ -1206,10 +1206,14 @@ function CanvasBar({ id, x, t, close }: { id: string; x: number; t: number; clos
   const project = useStore((s) => s.project);
   const { edit, setUI, toast, checkpoint } = useStore.getState();
   const [y, setY] = useState<number | null>(null);
+  const barRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const el = document.querySelector<HTMLElement>(`.cvseg[data-cv="${id}"]`);
     const r = el?.getBoundingClientRect();
-    setY(r ? (r.top - 36 < 4 ? r.bottom + 4 : r.top - 34) : null);
+    // sits right on the canvas clip (no gap); under it only when there's no room above
+    const bh = barRef.current?.offsetHeight || 28;
+    const ny = r ? (r.top - bh < 4 ? r.bottom : r.top - bh) : null;
+    if (ny !== y) setY(ny);
   });
   const keys = project.canvasKeys ?? [];
   const onKey = keys.some((k) => Math.abs(k - t) <= 0.02);
@@ -1217,7 +1221,7 @@ function CanvasBar({ id, x, t, close }: { id: string; x: number; t: number; clos
   const W = 6 * 31;
   if (y == null) return null;
   return createPortal(
-    <div className="fbar cvbar" style={{ position: "fixed", left: Math.min(Math.max(x - W / 2, 8), innerWidth - W - 8), top: y }} onPointerDown={(e) => e.stopPropagation()}>
+    <div ref={barRef} className="fbar cvbar" style={{ position: "fixed", left: Math.min(Math.max(x - W / 2, 8), innerWidth - W - 8), top: y }} onPointerDown={(e) => e.stopPropagation()}>
       <button className="ib" title="Canvas settings: size, length, background, looks, effects"
         onClick={(e) => { const r = (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect(); setUI({ panel: { section: "scene", itemId: null, canvas: !id, bgId: id || undefined, x: r.left + r.width / 2, y: r.top, anchor: { top: r.top, bottom: r.bottom } } }); close(); }}><Icon name="sparkle" /></button>
       <span className="fsep" />

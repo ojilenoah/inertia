@@ -65,6 +65,7 @@ const P: Record<string, string> = {
   mask: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 3v18M12 7h4.5M12 11h6M12 15h5",
   redo: "M15 14l5-5-5-5M20 9H9a5 5 0 0 0 0 10h3",
   side: "M3 3h18v18H3zM9 3v18",
+  layers: "M12 3 3 7.5l9 4.5 9-4.5zM3 12l9 4.5 9-4.5M3 16.5l9 4.5 9-4.5",
   trash: "M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3",
   anim: "M3 12h7M14 6l6 6-6 6M3 7h4M3 17h4",
   save: "M5 3h11l3 3v15H5zM8 3v6h8V3M8 21v-7h8v7",

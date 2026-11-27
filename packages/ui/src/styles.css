@@ -1580,3 +1580,6 @@ body.maskpicking .stagewrap, body.maskpicking .lanes, body.maskpicking .clip { c
 .mo.phone .tlbar .tlside.right .ib svg.i { width: 19px; height: 19px; }
 /* the transition marker between two canvases: a square */
 .lrow.canvas .trbadge, .lrow.canvas .trbadge.on { width: 18px; height: 18px; max-height: none; }
+/* phones: the selected item's bar at the bottom: bigger buttons and icons */
+body .fbar.under .ib { width: 36px; height: 36px; }
+body .fbar.under .ib svg.i { width: 20px; height: 20px; }
