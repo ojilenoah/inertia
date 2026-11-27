@@ -40,9 +40,11 @@ type Row =
   | { kind: "graph"; item: Item; h: number; group?: string }
   | { kind: "canvas"; h: number };
 
-const canvasH = (_p: Project) => ROW_H;
+const canvasH = (_p: Project) => CV_H;
 /** Height of a row in the timeline (clips are ROW_H - 2 × CLIP_PAD tall). Phones use thinner rows (set by the timeline). */
 let ROW_H = 32, CLIP_PAD = 4;
+/** The background (canvas) row: phones give it more height than a track row. */
+let CV_H = 32;
 /** Phones: thin rows that keep the same size on screen whatever the interface size. */
 function setRowSize(phone: boolean, uiScale: number) {
   const k = Math.min(1, Math.max(0.5, uiScale || 1));
@@ -50,6 +52,7 @@ function setRowSize(phone: boolean, uiScale: number) {
   // on screen at any interface size
   ROW_H = phone ? Math.round(28 / k) : 32;
   CLIP_PAD = phone ? Math.round(1.5 / k) : 4;
+  CV_H = phone ? Math.round(40 / k) : ROW_H;
 }
 
 /** Normal and group tracks, then audio tracks, then the canvas track at the very bottom. */
@@ -579,7 +582,7 @@ export function Timeline() {
   const tools: [typeof ui.tool, string, string][] = [["select", "cursor", "Select (V)"], ["blade", "scissors", "Blade: click an item to cut it there (B)"], ["ripple", "ripple", "Ripple: trims and deletes close the gap (R)"]];
 
   return (
-    <section className="card timeline" aria-label="Timeline" style={{ ["--rowh" as string]: `${ROW_H}px`, ["--clippad" as string]: `${CLIP_PAD}px` }}>
+    <section className="card timeline" aria-label="Timeline" style={{ ["--rowh" as string]: `${ROW_H}px`, ["--cvh" as string]: `${CV_H}px`, ["--clippad" as string]: `${CLIP_PAD}px` }}>
       <AnimatePresence>{rmenu && (
         <motion.div key="rmenu" className="rmenu-back" {...anim.fade} onPointerDown={(e) => { if (e.target === e.currentTarget) setRmenu(null); }}>
           <motion.div className="cmenu rmenu" role="menu" {...anim.pop} style={{ left: Math.min(rmenu.x, innerWidth - 230), top: Math.min(rmenu.y + 6, innerHeight - 200) }}>
@@ -1371,7 +1374,7 @@ function CanvasRow({ h, x, pps, tOf }: { h: number; x: (t: number) => number; pp
       {(() => {
         const end = bgs.length ? Math.max(...bgs.map((q) => q.end)) : project.duration;
         return (
-          <button className="cvadd" title="Add a canvas" aria-label="Add a canvas" style={{ left: x(end) + 6, top: CLIP_PAD, width: ROW_H - 2 * CLIP_PAD, height: ROW_H - 2 * CLIP_PAD }}
+          <button className="cvadd" title="Add a canvas" aria-label="Add a canvas" style={{ left: x(end) + 4, top: 0, width: Math.min(CV_H, 32), height: CV_H }}
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
